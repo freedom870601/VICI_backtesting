@@ -17,8 +17,9 @@ from backtest.metrics import (
 class TestCAGR:
     def test_equity_doubles_in_252_days_yields_cagr_100pct(self):
         """Equity doubles in exactly 252 trading days → CAGR = 100%."""
-        equity = pl.Series("equity", [100.0, 200.0])
-        # 2 points = 1 period
+        import numpy as np
+        # 253 data points = 252 periods = exactly 1 trading year
+        equity = pl.Series("equity", np.linspace(100.0, 200.0, 253))
         result = calculate_cagr(equity, periods_per_year=252)
         assert math.isclose(result, 1.0, rel_tol=1e-6)
 
