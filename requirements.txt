@@ -1,0 +1,4 @@
+yfinance>=0.2.40
+polars>=0.20.0
+plotly>=5.20.0
+streamlit>=1.35.0
