@@ -162,3 +162,103 @@ class TestRunBacktestWithCosts:
         result = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01, slippage_rate=0.005)
         required = {"entry_date", "exit_date", "entry_price", "exit_price", "pnl"}
         assert required.issubset(set(result["trades"].columns))
+
+
+class TestRunBacktestSpreadAndEntryType:
+    """Tests for spread_bps and entry_price_type parameters."""
+
+    def _two_bar_signals(self, buy_close: float = 100.0, sell_close: float = 110.0) -> pl.DataFrame:
+        """Minimal signals: BUY at bar 0, SELL at bar 1."""
+        return pl.DataFrame({
+            "close": [buy_close, sell_close],
+            "signal": pl.Series([1, -1], dtype=pl.Int8),
+        })
+
+    def test_spread_zero_matches_default(self, sma_crossover_prices):
+        """spread_bps=0 must produce identical equity to the no-spread default."""
+        signals = make_signals(sma_crossover_prices)
+        result_default = run_backtest(signals, initial_capital=10_000.0)
+        result_zero_spread = run_backtest(signals, initial_capital=10_000.0, spread_bps=0.0)
+        assert result_default["equity"].to_list() == result_zero_spread["equity"].to_list()
+
+    def test_buy_fill_includes_spread(self):
+        """BUY fill = price * (1 + slippage) * (1 + spread_bps/20000)."""
+        signals = self._two_bar_signals(100.0, 200.0)
+        spread_bps = 10.0
+        slippage = 0.005
+        result = run_backtest(
+            signals, initial_capital=10_000.0,
+            slippage_rate=slippage, spread_bps=spread_bps,
+        )
+        trades = result["trades"]
+        assert not trades.is_empty()
+        expected_fill = 100.0 * (1.0 + slippage) * (1.0 + spread_bps / 20_000.0)
+        assert abs(trades["entry_price"][0] - expected_fill) < 1e-6
+
+    def test_sell_fill_includes_spread(self):
+        """SELL fill = price * (1 - slippage) * (1 - spread_bps/20000)."""
+        signals = self._two_bar_signals(100.0, 110.0)
+        spread_bps = 10.0
+        slippage = 0.005
+        result = run_backtest(
+            signals, initial_capital=10_000.0,
+            slippage_rate=slippage, spread_bps=spread_bps,
+        )
+        trades = result["trades"]
+        assert not trades.is_empty()
+        expected_fill = 110.0 * (1.0 - slippage) * (1.0 - spread_bps / 20_000.0)
+        assert abs(trades["exit_price"][0] - expected_fill) < 1e-6
+
+    def test_spread_reduces_final_equity(self, sma_crossover_prices):
+        """Positive spread_bps must reduce final equity vs zero-spread run."""
+        signals = make_signals(sma_crossover_prices)
+        result_no_spread = run_backtest(signals, initial_capital=10_000.0)
+        result_with_spread = run_backtest(signals, initial_capital=10_000.0, spread_bps=20.0)
+        if not result_with_spread["trades"].is_empty():
+            assert result_with_spread["equity"][-1] <= result_no_spread["equity"][-1]
+
+    def test_entry_type_open_uses_open_price(self):
+        """When entry_price_type='open', BUY fill must use the 'open' column price."""
+        open_price = 95.0
+        close_price = 100.0
+        signals = pl.DataFrame({
+            "open": [open_price, 110.0],
+            "close": [close_price, 110.0],
+            "signal": pl.Series([1, -1], dtype=pl.Int8),
+        })
+        result = run_backtest(signals, initial_capital=10_000.0, entry_price_type="open")
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # fill should be open_price, not close_price
+        assert abs(trades["entry_price"][0] - open_price) < 1e-6
+
+    def test_entry_type_close_unchanged(self):
+        """entry_price_type='close' (default) must use close price for BUY fill."""
+        open_price = 95.0
+        close_price = 100.0
+        signals = pl.DataFrame({
+            "open": [open_price, 110.0],
+            "close": [close_price, 110.0],
+            "signal": pl.Series([1, -1], dtype=pl.Int8),
+        })
+        result = run_backtest(signals, initial_capital=10_000.0, entry_price_type="close")
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # fill should be close_price
+        assert abs(trades["entry_price"][0] - close_price) < 1e-6
+
+    def test_trade_has_entry_type_column(self, sma_crossover_prices):
+        """Trade log must contain 'entry_type' column."""
+        signals = make_signals(sma_crossover_prices)
+        result = run_backtest(signals, initial_capital=10_000.0, entry_price_type="close")
+        trades = result["trades"]
+        # Column should be present even in empty trades (schema check)
+        assert "entry_type" in trades.columns
+
+    def test_entry_type_value_stored_in_trade(self, sma_crossover_prices):
+        """Each trade record's entry_type matches the parameter passed."""
+        signals = make_signals(sma_crossover_prices)
+        result = run_backtest(signals, initial_capital=10_000.0, entry_price_type="open")
+        trades = result["trades"]
+        if not trades.is_empty():
+            assert all(v == "open" for v in trades["entry_type"].to_list())

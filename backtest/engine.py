@@ -22,6 +22,7 @@ _EMPTY_TRADES_SCHEMA = {
     "entry_price": pl.Float64,
     "exit_price": pl.Float64,
     "pnl": pl.Float64,
+    "entry_type": pl.Utf8,
 }
 
 
@@ -30,6 +31,8 @@ def run_backtest(
     initial_capital: float = 10_000.0,
     commission_rate: float = 0.0,
     slippage_rate: float = 0.0,
+    spread_bps: float = 0.0,
+    entry_price_type: str = "close",
 ) -> BacktestResult:
     """Run an all-in / all-out backtest from a signals DataFrame.
 
@@ -38,18 +41,25 @@ def run_backtest(
     Open positions at end-of-data are closed at the last available price.
 
     Args:
-        signals: DataFrame with columns 'close' and 'signal'.
+        signals: DataFrame with columns 'close' and 'signal' (and optionally 'open').
         initial_capital: Starting cash in currency units (default 10,000).
         commission_rate: Fractional commission applied to trade value (default 0.0).
         slippage_rate: Fractional slippage applied to fill price (default 0.0).
+        spread_bps: Bid-ask spread in basis points, applied as half-spread per side (default 0.0).
+        entry_price_type: Price used for BUY fills — 'close' (default) or 'open'.
 
     Returns:
         BacktestResult with 'equity' (daily mark-to-market) and 'trades' (closed trade log).
     """
-    # Convert to Python lists once — avoids repeated polars element access overhead
     closes = signals["close"].to_list()
     signal_list = signals["signal"].to_list()
     n = len(closes)
+
+    # Preload open prices if available and requested
+    use_open = entry_price_type == "open" and "open" in signals.columns
+    opens = signals["open"].to_list() if use_open else closes
+
+    spread_factor = spread_bps / 20_000.0  # half-spread per side
 
     equity_values: list[float] = []
     trade_records: list[dict] = []
@@ -68,8 +78,9 @@ def run_backtest(
         equity_values.append(current_equity)
 
         if sig == 1 and shares == 0.0:
-            # BUY: go all-in with slippage and commission
-            fill_price = price * (1.0 + slippage_rate)
+            # BUY: go all-in with slippage, spread, and commission
+            buy_price = opens[i] if use_open else price
+            fill_price = buy_price * (1.0 + slippage_rate) * (1.0 + spread_factor)
             commission = cash * commission_rate
             available_cash = cash - commission
             shares = available_cash / fill_price
@@ -78,8 +89,8 @@ def run_backtest(
             entry_price = fill_price
 
         elif sig == -1 and shares > 0.0:
-            # SELL: liquidate with slippage and commission
-            fill_price = price * (1.0 - slippage_rate)
+            # SELL: liquidate with slippage, spread, and commission
+            fill_price = price * (1.0 - slippage_rate) * (1.0 - spread_factor)
             gross_proceeds = shares * fill_price
             commission = gross_proceeds * commission_rate
             net_proceeds = gross_proceeds - commission
@@ -91,6 +102,7 @@ def run_backtest(
                     "entry_price": entry_price,
                     "exit_price": fill_price,
                     "pnl": pnl,
+                    "entry_type": entry_price_type,
                 }
             )
             cash = net_proceeds
@@ -100,7 +112,7 @@ def run_backtest(
 
     # Close any open position at the last bar price
     if shares > 0.0:
-        fill_price = closes[-1] * (1.0 - slippage_rate)
+        fill_price = closes[-1] * (1.0 - slippage_rate) * (1.0 - spread_factor)
         gross_proceeds = shares * fill_price
         commission = gross_proceeds * commission_rate
         net_proceeds = gross_proceeds - commission
@@ -112,6 +124,7 @@ def run_backtest(
                 "entry_price": entry_price,
                 "exit_price": fill_price,
                 "pnl": pnl,
+                "entry_type": entry_price_type,
             }
         )
 
