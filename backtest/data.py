@@ -30,7 +30,7 @@ def fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
         ValueError: If yfinance returns no data for the given ticker/range.
     """
     logger.info("Fetching %s from %s to %s", ticker, start, end)
-    raw = yf.download(ticker, start=start, end=end, auto_adjust=True, progress=False)
+    raw = yf.download(ticker, start=start, end=end, auto_adjust=True, progress=False, timeout=10)
 
     if raw.empty:
         raise ValueError(f"No data returned for ticker '{ticker}' between {start} and {end}")

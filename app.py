@@ -24,6 +24,13 @@ from backtest.strategy import generate_sma_signals
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
+    """Cached wrapper around fetch_prices; results expire after 1 hour."""
+    return fetch_prices(ticker, start, end)
+
+
 _TICKER_COLORS = [
     "#1f77b4", "#2ca02c", "#9467bd", "#8c564b",
     "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
@@ -56,8 +63,8 @@ def run_ticker_pipeline(
 ) -> dict | None:
     """Run full pipeline for one ticker. Returns None on failure (logs error)."""
     try:
-        prices_df = fetch_prices(ticker, start_date, end_date)
-    except ValueError as exc:
+        prices_df = cached_fetch_prices(ticker, start_date, end_date)
+    except Exception as exc:
         logger.error("Failed to fetch data for %s: %s", ticker, exc)
         return None
 
@@ -227,8 +234,8 @@ if mode == "📈 Single Stock":
             else:
                 with st.spinner("Fetching SPY benchmark…"):
                     try:
-                        spy_df = fetch_prices("SPY", str(start_date), str(end_date))
-                    except ValueError:
+                        spy_df = cached_fetch_prices("SPY", str(start_date), str(end_date))
+                    except Exception:
                         spy_df = None
 
                 # Metrics
@@ -385,8 +392,8 @@ else:
             with st.spinner(f"Downloading data for {len(factor_tickers)} tickers…"):
                 for tkr in factor_tickers:
                     try:
-                        prices_dict[tkr] = fetch_prices(tkr, str(factor_start), str(factor_end))
-                    except ValueError as exc:
+                        prices_dict[tkr] = cached_fetch_prices(tkr, str(factor_start), str(factor_end))
+                    except Exception as exc:
                         logger.error("Factor: failed to fetch %s: %s", tkr, exc)
                         failed_f.append(tkr)
 
@@ -416,9 +423,9 @@ else:
                     spy_returns_raw = None
                     with st.spinner("Fetching SPY as CAPM benchmark…"):
                         try:
-                            spy_factor_df = fetch_prices("SPY", str(factor_start), str(factor_end))
+                            spy_factor_df = cached_fetch_prices("SPY", str(factor_start), str(factor_end))
                             spy_returns_raw = spy_factor_df["close"].pct_change().drop_nulls()
-                        except ValueError:
+                        except Exception:
                             pass
 
                     # CAPM metrics
