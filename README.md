@@ -1,6 +1,6 @@
 # VICI Backtesting System
 
-A minimal but verifiable US stock backtesting system built with an AI-only workflow (Claude Code). Features an SMA crossover strategy, five performance metrics, and an interactive Streamlit dashboard.
+A verifiable US stock backtesting system built with an AI-only workflow (Claude Code). Supports multiple strategies, transaction costs, multi-stock comparison, and an interactive Streamlit dashboard.
 
 **Live Demo:** https://vici-backtesting.zeabur.app
 
@@ -44,17 +44,41 @@ Then open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ---
 
+## Features
+
+### Strategies
+| Strategy | Description |
+|---|---|
+| **SMA Crossover** | Buys when fast SMA crosses above slow SMA; sells on reverse crossover. Fast/slow windows configurable. |
+| **Momentum** | Goes long when today's price exceeds the price N days ago (lookback 20–504 days, default 252). |
+
+Both strategies use an all-in / all-out position model: 100% of capital deployed on entry, full liquidation on exit.
+
+### Transaction Costs
+- **Commission rate** (0–2%): deducted from available cash on buy and from gross proceeds on sell.
+- **Slippage rate** (0–2%): applied to fill price — buy fills at `price × (1 + slippage)`, sell at `price × (1 - slippage)`.
+- Defaults are 0% (backward-compatible). Costs are reflected in both equity curve and trade PnL.
+
+### Multi-Stock Comparison
+- Enter multiple tickers as a comma-separated list (e.g. `AAPL, MSFT, GOOG`).
+- Invalid or unavailable tickers show a warning and are skipped; valid ones still run.
+- **Metrics table**: side-by-side CAGR, Volatility, Sharpe, Max Drawdown, Win Rate for all tickers.
+- **Normalized equity curves**: all tickers indexed to 100 at start, SPY benchmark overlaid as a dashed line.
+- **Per-ticker trade logs**: each ticker has its own expandable trade log section.
+
+---
+
 ## Key Assumptions
 
 ### Data Source
 - **yfinance only** — public, no API key required. Data availability and accuracy depends on Yahoo Finance.
 - `auto_adjust=True` is mandatory to avoid spurious signals from dividend/split price discontinuities.
-- Minimum backtest period: enough daily data to cover the slow SMA window (default 50 days).
+- Minimum backtest period: enough daily data to cover the strategy's warmup window.
 
 ### Strategy
-- **SMA Crossover (all-in / all-out)**: 100% of capital is deployed on BUY; full position liquidated on SELL.
-- Only crossover bars generate signals (`signal ∈ {-1, 0, 1}`); the engine tracks position state separately.
-- No transaction costs, commissions, or slippage by default.
+- All-in / all-out position management; no partial sizing or leverage.
+- SMA Crossover: only crossover bars generate signals (`signal ∈ {-1, 0, 1}`).
+- Momentum: signal = 1 when `close[i] > close[i - lookback]`, else -1 (0 during warmup).
 
 ### Metrics
 | Metric | Formula |
@@ -100,15 +124,16 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 1 | `test(metrics)` | RED: 23 failing metric tests |
 | 1 | `feat(metrics)` | GREEN: all 23 tests passing |
 | 1 | `refactor(metrics)` | Extract `_validate_non_empty`, add `__all__` |
-| 2 | `test(strategy)` | RED: 10 failing strategy tests |
+| 2 | `test(strategy)` | RED: 10 failing SMA strategy tests |
 | 2 | `feat(strategy)` | GREEN: SMA crossover signal generation |
 | 3 | `test(engine)` | RED: 9 failing engine tests |
 | 3 | `feat(engine)` | GREEN: all-in/all-out backtesting loop |
 | 4 | `test(data)` | RED: 6 failing data tests (monkeypatched) |
 | 4 | `feat(data)` | GREEN: yfinance fetching with polars output |
-| 5 | `feat(app)` | Streamlit dashboard |
+| 5 | `feat(app)` | Streamlit dashboard (single stock, SMA) |
 | 6 | `chore(docker)` | Dockerfile for Zeabur |
-| 7 | `docs` | This README |
+| 7 | `docs` | README |
+| 8 | `feat` | Momentum strategy, transaction costs, multi-stock view (65 tests, 94% coverage) |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
@@ -121,11 +146,11 @@ Name                   Stmts   Miss  Cover
 ------------------------------------------
 backtest/__init__.py       0      0   100%
 backtest/data.py          19      1    95%
-backtest/engine.py        46      4    91%
+backtest/engine.py        53      6    89%
 backtest/metrics.py       34      0   100%
-backtest/strategy.py      13      0   100%
+backtest/strategy.py      20      0   100%
 ------------------------------------------
-TOTAL                    112      5    96%
+TOTAL                    126      7    94%
 ```
 
 ---
@@ -144,9 +169,9 @@ TOTAL                    112      5    96%
 ├── backtest/
 │   ├── __init__.py
 │   ├── data.py             # yfinance data fetching
-│   ├── engine.py           # Core backtesting loop
+│   ├── engine.py           # Core backtesting loop (supports commission + slippage)
 │   ├── metrics.py          # CAGR, Sharpe, MDD, etc.
-│   └── strategy.py         # SMA crossover signals
+│   └── strategy.py         # SMA crossover + Momentum signals
 └── tests/
     ├── conftest.py         # Shared fixtures
     ├── test_data.py
