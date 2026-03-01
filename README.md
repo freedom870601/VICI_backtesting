@@ -2,6 +2,8 @@
 
 A minimal but verifiable US stock backtesting system built with an AI-only workflow (Claude Code). Features an SMA crossover strategy, five performance metrics, and an interactive Streamlit dashboard.
 
+**Live Demo:** https://vici-backtesting.zeabur.app
+
 ---
 
 ## How to Run Locally
