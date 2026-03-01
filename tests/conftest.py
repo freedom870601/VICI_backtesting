@@ -1,5 +1,7 @@
 """Shared pytest fixtures for the backtesting test suite."""
 
+import datetime
+
 import numpy as np
 import polars as pl
 import pytest
@@ -62,8 +64,6 @@ def known_returns() -> pl.Series:
 @pytest.fixture
 def flat_prices_df() -> pl.DataFrame:
     """100-row constant price DataFrame for engine/strategy tests."""
-    import datetime
-
     start = datetime.date(2020, 1, 1)
     dates = [start + datetime.timedelta(days=i) for i in range(100)]
     return pl.DataFrame(
@@ -77,8 +77,6 @@ def flat_prices_df() -> pl.DataFrame:
 @pytest.fixture
 def trending_up_df() -> pl.DataFrame:
     """252-day doubling price DataFrame for engine tests."""
-    import datetime
-
     start = datetime.date(2020, 1, 1)
     dates = [start + datetime.timedelta(days=i) for i in range(252)]
     prices = np.linspace(100.0, 200.0, 252).tolist()
@@ -86,8 +84,36 @@ def trending_up_df() -> pl.DataFrame:
 
 
 @pytest.fixture
-def momentum_prices() -> pl.Series:
-    """400-day series: 200 flat at 100.0, then 200 rising linearly to 200.0."""
-    flat = [100.0] * 200
-    rising = np.linspace(100.0, 200.0, 200).tolist()
-    return pl.Series("close", flat + rising)
+def multi_ticker_prices_dict() -> dict[str, pl.DataFrame]:
+    """
+    4 tickers (A/B/C/D) with 300 trading days of seeded price data.
+
+    Returns dict[str, pl.DataFrame] with 'date' and 'close' columns per ticker.
+    Prices are generated with a seeded RNG for determinism.
+    """
+    rng = np.random.default_rng(seed=42)
+    n_days = 300
+    start = datetime.date(2021, 1, 4)
+
+    # Generate business dates (skip weekends)
+    dates: list[datetime.date] = []
+    d = start
+    while len(dates) < n_days:
+        if d.weekday() < 5:  # Mon–Fri
+            dates.append(d)
+        d += datetime.timedelta(days=1)
+
+    result: dict[str, pl.DataFrame] = {}
+    base_prices = {"A": 100.0, "B": 50.0, "C": 200.0, "D": 75.0}
+
+    for ticker, base in base_prices.items():
+        daily_returns = rng.normal(loc=0.0003, scale=0.015, size=n_days)
+        prices = [base]
+        for r in daily_returns[:-1]:
+            prices.append(prices[-1] * (1.0 + r))
+        result[ticker] = pl.DataFrame({
+            "date": pl.Series(dates, dtype=pl.Date),
+            "close": pl.Series(prices, dtype=pl.Float64),
+        })
+
+    return result
