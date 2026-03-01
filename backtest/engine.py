@@ -28,6 +28,8 @@ _EMPTY_TRADES_SCHEMA = {
 def run_backtest(
     signals: pl.DataFrame,
     initial_capital: float = 10_000.0,
+    commission_rate: float = 0.0,
+    slippage_rate: float = 0.0,
 ) -> BacktestResult:
     """Run an all-in / all-out backtest from a signals DataFrame.
 
@@ -36,8 +38,10 @@ def run_backtest(
     Open positions at end-of-data are closed at the last available price.
 
     Args:
-        signals: DataFrame with columns 'close' and 'signal' (output of generate_sma_signals).
+        signals: DataFrame with columns 'close' and 'signal'.
         initial_capital: Starting cash in currency units (default 10,000).
+        commission_rate: Fractional commission applied to trade value (default 0.0).
+        slippage_rate: Fractional slippage applied to fill price (default 0.0).
 
     Returns:
         BacktestResult with 'equity' (daily mark-to-market) and 'trades' (closed trade log).
@@ -64,42 +68,49 @@ def run_backtest(
         equity_values.append(current_equity)
 
         if sig == 1 and shares == 0.0:
-            # BUY: go all-in
-            shares = cash / price
+            # BUY: go all-in with slippage and commission
+            fill_price = price * (1.0 + slippage_rate)
+            commission = cash * commission_rate
+            available_cash = cash - commission
+            shares = available_cash / fill_price
             cash = 0.0
             entry_idx = i
-            entry_price = price
+            entry_price = fill_price
 
         elif sig == -1 and shares > 0.0:
-            # SELL: liquidate
-            exit_price = price
-            proceeds = shares * exit_price
-            pnl = proceeds - (shares * entry_price)
+            # SELL: liquidate with slippage and commission
+            fill_price = price * (1.0 - slippage_rate)
+            gross_proceeds = shares * fill_price
+            commission = gross_proceeds * commission_rate
+            net_proceeds = gross_proceeds - commission
+            pnl = net_proceeds - (shares * entry_price)
             trade_records.append(
                 {
                     "entry_date": entry_idx,
                     "exit_date": i,
                     "entry_price": entry_price,
-                    "exit_price": exit_price,
+                    "exit_price": fill_price,
                     "pnl": pnl,
                 }
             )
-            cash = proceeds
+            cash = net_proceeds
             shares = 0.0
             entry_idx = None
             entry_price = 0.0
 
     # Close any open position at the last bar price
     if shares > 0.0:
-        exit_price = closes[-1]
-        proceeds = shares * exit_price
-        pnl = proceeds - (shares * entry_price)
+        fill_price = closes[-1] * (1.0 - slippage_rate)
+        gross_proceeds = shares * fill_price
+        commission = gross_proceeds * commission_rate
+        net_proceeds = gross_proceeds - commission
+        pnl = net_proceeds - (shares * entry_price)
         trade_records.append(
             {
                 "entry_date": entry_idx,
                 "exit_date": n - 1,
                 "entry_price": entry_price,
-                "exit_price": exit_price,
+                "exit_price": fill_price,
                 "pnl": pnl,
             }
         )

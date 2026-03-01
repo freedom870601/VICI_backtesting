@@ -81,3 +81,84 @@ class TestRunBacktest:
         result = run_backtest(signals, initial_capital=10_000.0)
         assert result["trades"].is_empty()
         assert "pnl" in result["trades"].columns
+
+
+class TestRunBacktestWithCosts:
+    def test_zero_costs_matches_no_cost_result(self, sma_crossover_prices):
+        """commission_rate=0, slippage_rate=0 must produce identical results to default."""
+        signals = make_signals(sma_crossover_prices)
+        result_default = run_backtest(signals, initial_capital=10_000.0)
+        result_zero = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.0, slippage_rate=0.0)
+        assert result_default["equity"].to_list() == result_zero["equity"].to_list()
+
+    def test_commission_reduces_final_equity(self, sma_crossover_prices):
+        """Positive commission_rate must reduce final equity vs no-cost run."""
+        signals = make_signals(sma_crossover_prices)
+        result_no_cost = run_backtest(signals, initial_capital=10_000.0)
+        result_with_cost = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01)
+        # Only meaningful if there were trades
+        if not result_with_cost["trades"].is_empty():
+            assert result_with_cost["equity"][-1] <= result_no_cost["equity"][-1]
+
+    def test_slippage_reduces_final_equity(self, sma_crossover_prices):
+        """Positive slippage_rate must reduce final equity vs no-cost run."""
+        signals = make_signals(sma_crossover_prices)
+        result_no_cost = run_backtest(signals, initial_capital=10_000.0)
+        result_with_slip = run_backtest(signals, initial_capital=10_000.0, slippage_rate=0.005)
+        if not result_with_slip["trades"].is_empty():
+            assert result_with_slip["equity"][-1] <= result_no_cost["equity"][-1]
+
+    def test_combined_costs_reduce_equity_further(self, sma_crossover_prices):
+        """Combined commission + slippage must reduce equity more than either alone."""
+        signals = make_signals(sma_crossover_prices)
+        result_commission = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01)
+        result_both = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01, slippage_rate=0.005)
+        if not result_both["trades"].is_empty():
+            assert result_both["equity"][-1] <= result_commission["equity"][-1]
+
+    def test_commission_exact_arithmetic(self):
+        """Verify commission arithmetic: buy 100 shares @$100, sell @$110, 1% commission."""
+        # Craft a signals DataFrame: buy at bar 0, sell at bar 1
+        signals = pl.DataFrame({
+            "close": [100.0, 110.0],
+            "signal": pl.Series([1, -1], dtype=pl.Int8),
+        })
+        result = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01)
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # commission_on_buy = 10000 * 0.01 = 100 → available 9900
+        # shares = 9900 / 100 = 99
+        # gross_proceeds = 99 * 110 = 10890
+        # commission_on_sell = 10890 * 0.01 = 108.90
+        # net_proceeds = 10890 - 108.90 = 10781.10
+        # pnl = 10781.10 - (99 * 100) = 10781.10 - 9900 = 881.10
+        expected_pnl = 881.10
+        assert abs(trades["pnl"][0] - expected_pnl) < 0.01
+
+    def test_slippage_adjusts_fill_prices_in_trade_log(self):
+        """Slippage should cause entry_price > raw close (buy) and exit_price < raw close (sell)."""
+        signals = pl.DataFrame({
+            "close": [100.0, 110.0],
+            "signal": pl.Series([1, -1], dtype=pl.Int8),
+        })
+        slippage = 0.01
+        result = run_backtest(signals, initial_capital=10_000.0, slippage_rate=slippage)
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # entry fill = 100 * 1.01 = 101.0
+        assert abs(trades["entry_price"][0] - 101.0) < 1e-9
+        # exit fill = 110 * 0.99 = 108.90
+        assert abs(trades["exit_price"][0] - 108.90) < 1e-9
+
+    def test_equity_never_negative_with_extreme_costs(self, sma_crossover_prices):
+        """Even with very high costs, equity must never go below 0."""
+        signals = make_signals(sma_crossover_prices)
+        result = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.5, slippage_rate=0.5)
+        assert result["equity"].min() >= 0.0
+
+    def test_no_cost_trade_log_schema_unchanged(self, sma_crossover_prices):
+        """Trade log schema must include the same columns regardless of cost params."""
+        signals = make_signals(sma_crossover_prices)
+        result = run_backtest(signals, initial_capital=10_000.0, commission_rate=0.01, slippage_rate=0.005)
+        required = {"entry_date", "exit_date", "entry_price", "exit_price", "pnl"}
+        assert required.issubset(set(result["trades"].columns))

@@ -83,3 +83,11 @@ def trending_up_df() -> pl.DataFrame:
     dates = [start + datetime.timedelta(days=i) for i in range(252)]
     prices = np.linspace(100.0, 200.0, 252).tolist()
     return pl.DataFrame({"date": dates, "close": prices})
+
+
+@pytest.fixture
+def momentum_prices() -> pl.Series:
+    """400-day series: 200 flat at 100.0, then 200 rising linearly to 200.0."""
+    flat = [100.0] * 200
+    rising = np.linspace(100.0, 200.0, 200).tolist()
+    return pl.Series("close", flat + rising)
