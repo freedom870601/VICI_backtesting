@@ -1,6 +1,6 @@
 # VICI Backtesting System
 
-A verifiable US stock backtesting system built with an AI-only workflow (Claude Code). Supports multiple strategies, transaction costs, multi-stock comparison, and an interactive Streamlit dashboard.
+A verifiable US stock backtesting system built with an AI-only workflow (Claude Code). Features SMA crossover single-stock backtesting, factor analysis long-short momentum, transaction costs, multi-stock comparison, and an interactive Streamlit dashboard.
 
 **Live Demo:** https://vici-backtesting.zeabur.app
 
@@ -46,18 +46,27 @@ Then open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ## Features
 
-### Strategies
-| Strategy | Description |
-|---|---|
-| **SMA Crossover** | Buys when fast SMA crosses above slow SMA; sells on reverse crossover. Fast/slow windows configurable. |
-| **Momentum** | Goes long when today's price exceeds the price N days ago (lookback 20–504 days, default 252). |
+### Single Stock — SMA Crossover
+- **Signal**: buys when fast SMA crosses above slow SMA; sells on reverse crossover.
+- Fast/slow windows configurable via sidebar sliders.
+- All-in / all-out position model: 100% of capital deployed on entry, full liquidation on exit.
+- Buy/sell markers shown on equity curve for single-ticker runs.
 
-Both strategies use an all-in / all-out position model: 100% of capital deployed on entry, full liquidation on exit.
+### Factor Analysis — Long-Short Momentum
+- Ranks a user-defined stock universe by momentum score (`close[d] / close[d - lookback] - 1`).
+- Monthly rebalance: go long top-N, go short bottom-N (equal-weight, 50/50 allocation).
+- CAPM regression (OLS) against SPY benchmark: reports annualized alpha, beta, t-stats, R².
 
 ### Transaction Costs
-- **Commission rate** (0–2%): deducted from available cash on buy and from gross proceeds on sell.
-- **Slippage rate** (0–2%): applied to fill price — buy fills at `price × (1 + slippage)`, sell at `price × (1 - slippage)`.
-- Defaults are 0% (backward-compatible). Costs are reflected in both equity curve and trade PnL.
+Three independent cost parameters, all reflected in equity curve and trade PnL:
+
+| Parameter | Range | Effect |
+|---|---|---|
+| **Commission (%)** | 0–2% | Deducted from cash on buy; from gross proceeds on sell |
+| **Slippage (%)** | 0–2% | Buy fills at `price × (1 + s)`; sell at `price × (1 - s)` |
+| **Bid-Ask Spread (bps)** | 0–50 bps | Half-spread per side: `spread_factor = bps / 20000` |
+
+Slippage and spread model different costs (market impact vs. bid-ask crossing) and are applied multiplicatively. Defaults are 0.
 
 ### Multi-Stock Comparison
 - Enter multiple tickers as a comma-separated list (e.g. `AAPL, MSFT, GOOG`).
@@ -78,7 +87,7 @@ Both strategies use an all-in / all-out position model: 100% of capital deployed
 ### Strategy
 - All-in / all-out position management; no partial sizing or leverage.
 - SMA Crossover: only crossover bars generate signals (`signal ∈ {-1, 0, 1}`).
-- Momentum: signal = 1 when `close[i] > close[i - lookback]`, else -1 (0 during warmup).
+- Factor Analysis: monthly rebalance long-short using cross-sectional momentum scores.
 
 ### Metrics
 | Metric | Formula |
@@ -133,7 +142,9 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 5 | `feat(app)` | Streamlit dashboard (single stock, SMA) |
 | 6 | `chore(docker)` | Dockerfile for Zeabur |
 | 7 | `docs` | README |
-| 8 | `feat` | Momentum strategy, transaction costs, multi-stock view (65 tests, 94% coverage) |
+| 8 | `feat` | Transaction costs (commission, slippage, spread), multi-stock view, entry price type |
+| 9 | `feat` | Factor analysis tab: long-short backtest, CAPM regression, monthly holdings |
+| 10 | `refactor` | Remove single-stock momentum strategy; SMA Crossover is the only single-stock strategy |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
@@ -146,12 +157,14 @@ Name                   Stmts   Miss  Cover
 ------------------------------------------
 backtest/__init__.py       0      0   100%
 backtest/data.py          19      1    95%
-backtest/engine.py        53      6    89%
+backtest/engine.py        57      6    89%
+backtest/factor.py       149      4    97%
 backtest/metrics.py       34      0   100%
-backtest/strategy.py      20      0   100%
+backtest/strategy.py      13      0   100%
 ------------------------------------------
-TOTAL                    126      7    94%
+TOTAL                    272     11    96%
 ```
+84 tests passing.
 
 ---
 
@@ -165,17 +178,19 @@ TOTAL                    126      7    94%
 ├── requirements.txt        # Production dependencies
 ├── requirements-dev.txt    # Dev/test dependencies
 ├── .python-version         # Pins Python 3.11 for uv
-├── app.py                  # Streamlit entrypoint
+├── app.py                  # Streamlit entrypoint (Single Stock + Factor Analysis tabs)
 ├── backtest/
 │   ├── __init__.py
 │   ├── data.py             # yfinance data fetching
-│   ├── engine.py           # Core backtesting loop (supports commission + slippage)
+│   ├── engine.py           # Core backtesting loop (commission, slippage, spread)
 │   ├── metrics.py          # CAGR, Sharpe, MDD, etc.
-│   └── strategy.py         # SMA crossover + Momentum signals
+│   ├── strategy.py         # SMA crossover signal generation
+│   └── factor.py           # Momentum scores, CAPM regression, long-short backtest
 └── tests/
     ├── conftest.py         # Shared fixtures
     ├── test_data.py
     ├── test_engine.py
     ├── test_metrics.py
-    └── test_strategy.py
+    ├── test_strategy.py
+    └── test_factor.py
 ```

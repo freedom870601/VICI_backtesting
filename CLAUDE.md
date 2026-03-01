@@ -56,14 +56,16 @@ A minimal but verifiable US stock backtesting system built with an AI-only workf
 │   ├── data.py                # yfinance data fetching
 │   ├── engine.py              # Core backtesting loop
 │   ├── strategy.py            # SMA crossover strategy
-│   └── metrics.py             # CAGR, Sharpe, MDD, etc.
+│   ├── metrics.py             # CAGR, Sharpe, MDD, etc.
+│   └── factor.py              # Momentum scores, CAPM regression, long-short backtest
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py            # Shared fixtures
 │   ├── test_data.py
 │   ├── test_engine.py
 │   ├── test_metrics.py
-│   └── test_strategy.py
+│   ├── test_strategy.py
+│   └── test_factor.py
 └── .claude/
     └── skills/                # Project-level Claude Code skills
 ```
