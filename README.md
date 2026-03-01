@@ -68,6 +68,8 @@ Three independent cost parameters, all reflected in equity curve and trade PnL:
 
 Slippage and spread model different costs (market impact vs. bid-ask crossing) and are applied multiplicatively. Defaults are 0.
 
+**Entry Price** selectbox: choose `close` (default) or `open` — determines the price used for BUY fills. Useful for next-bar execution simulation.
+
 ### Multi-Stock Comparison
 - Enter multiple tickers as a comma-separated list (e.g. `AAPL, MSFT, GOOG`).
 - Invalid or unavailable tickers show a warning and are skipped; valid ones still run.
@@ -142,9 +144,11 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 5 | `feat(app)` | Streamlit dashboard (single stock, SMA) |
 | 6 | `chore(docker)` | Dockerfile for Zeabur |
 | 7 | `docs` | README |
-| 8 | `feat` | Transaction costs (commission, slippage, spread), multi-stock view, entry price type |
-| 9 | `feat` | Factor analysis tab: long-short backtest, CAPM regression, monthly holdings |
-| 10 | `refactor` | Remove single-stock momentum strategy; SMA Crossover is the only single-stock strategy |
+| 8a | `feat(data)` | Add open price column; null-fill with close |
+| 8b | `feat(engine)` | Add spread_bps, entry_price_type, entry_type column in trade log |
+| 8c | `feat(app)` | Transaction costs UI, multi-stock comparison, entry price selectbox |
+| 9 | `feat(factor)` | Factor analysis: long-short backtest, CAPM regression, monthly holdings |
+| 10 | `refactor(strategy)` | Remove single-stock momentum; SMA Crossover is the only single-stock strategy |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
