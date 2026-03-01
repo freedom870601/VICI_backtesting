@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
-    """Fetch daily adjusted closing prices from yfinance.
+    """Fetch daily adjusted open and closing prices from yfinance.
 
     Args:
         ticker: Stock ticker symbol (e.g. 'AAPL').
@@ -23,6 +23,7 @@ def fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
     Returns:
         Polars DataFrame with columns:
             - date (pl.Date): trading date, sorted ascending
+            - open (pl.Float64): adjusted opening price (null filled with close)
             - close (pl.Float64): adjusted closing price, nulls dropped
 
     Raises:
@@ -38,18 +39,22 @@ def fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
     if isinstance(raw.columns, __import__("pandas").MultiIndex):
         raw.columns = raw.columns.get_level_values(0)
 
-    # Normalize to lowercase and keep only 'close'
+    # Normalize to lowercase and keep only 'open' and 'close'
     raw.columns = [c.lower() for c in raw.columns]
     raw = raw.reset_index()
     raw.columns = [c.lower() for c in raw.columns]
 
-    # Select date + close, convert to polars
-    df = pl.from_pandas(raw[["date", "close"]])
+    # Select date + open + close, convert to polars
+    df = pl.from_pandas(raw[["date", "open", "close"]])
 
-    # Ensure correct dtypes, drop nulls/NaNs, sort ascending
+    # Ensure correct dtypes, drop nulls on close, fill open nulls with close, sort ascending
     df = (
-        df.with_columns(pl.col("close").cast(pl.Float64))
+        df.with_columns(
+            pl.col("open").cast(pl.Float64),
+            pl.col("close").cast(pl.Float64),
+        )
         .drop_nulls(subset=["close"])
+        .with_columns(pl.col("open").fill_null(pl.col("close")))
         .sort("date")
     )
 
