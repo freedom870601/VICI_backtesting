@@ -12,7 +12,19 @@ A minimal but verifiable US stock backtesting system built with an AI-only workf
 - Backtesting engine with SMA crossover strategy
 - Performance metrics: CAGR, Annualized Volatility, Sharpe Ratio, Max Drawdown, Win Rate
 - Interactive Streamlit dashboard (equity curve, trade log, performance summary)
-- Public URL deployment via Zeabur
+- Public URL deployment via Zeabur: **https://vici-backtesting.zeabur.app**
+
+---
+
+## 🌐 Deployment Info
+
+- **Platform**: Zeabur
+- **Public URL**: https://vici-backtesting.zeabur.app
+- **GitHub**: https://github.com/freedom870601/VICI_backtesting
+- **Build**: Docker (`python:3.11-slim` + uv)
+- **Key fix**: `--server.enableCORS false --server.enableXsrfProtection false` required for Zeabur reverse proxy
+- **uv**: Installed at `~/.local/bin/uv`; run with `~/.local/bin/uv run pytest` if not in PATH
+- **Python**: Pinned to 3.11 via `.python-version` (resolves conda version conflict)
 
 ---
 
