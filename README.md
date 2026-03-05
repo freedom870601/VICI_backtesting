@@ -21,7 +21,7 @@ cd VICI_backtesting
 
 # Create virtual environment and install dependencies
 uv venv --python 3.11 .venv
-uv pip install -r requirements-dev.txt
+uv sync
 ```
 
 ### Run Tests

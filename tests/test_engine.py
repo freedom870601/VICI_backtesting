@@ -262,3 +262,45 @@ class TestRunBacktestSpreadAndEntryType:
         trades = result["trades"]
         if not trades.is_empty():
             assert all(v == "open" for v in trades["entry_type"].to_list())
+
+
+class TestForceClose:
+    """Tests covering the force-close-at-end-of-data branch (engine.py:114-129)."""
+
+    def test_force_close_when_no_sell_signal(self):
+        """BUY at bar 0, no SELL ever → force-closed trade appears in log at last bar."""
+        signals = pl.DataFrame({
+            "open": [100.0, 105.0, 110.0],
+            "close": [100.0, 105.0, 110.0],
+            "signal": pl.Series([1, 0, 0], dtype=pl.Int8),
+        })
+        result = run_backtest(signals, initial_capital=10_000.0)
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # Exit index should be the last bar (index 2)
+        assert trades["exit_date"][0] == 2
+
+    def test_force_close_pnl_computed_correctly(self):
+        """Force-closed trade PnL reflects slippage and commission at last bar price."""
+        buy_price = 100.0
+        last_price = 120.0
+        commission = 0.001
+        slippage = 0.002
+        signals = pl.DataFrame({
+            "open": [buy_price, 110.0, last_price],
+            "close": [buy_price, 110.0, last_price],
+            "signal": pl.Series([1, 0, 0], dtype=pl.Int8),
+        })
+        result = run_backtest(
+            signals,
+            initial_capital=10_000.0,
+            commission_rate=commission,
+            slippage_rate=slippage,
+        )
+        trades = result["trades"]
+        assert not trades.is_empty()
+        # exit_price should include slippage
+        expected_exit = last_price * (1.0 - slippage)
+        assert abs(trades["exit_price"][0] - expected_exit) < 1e-6
+        # PnL should be positive (price rose)
+        assert trades["pnl"][0] > 0

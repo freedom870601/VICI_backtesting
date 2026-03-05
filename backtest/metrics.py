@@ -12,6 +12,10 @@ __all__ = [
     "calculate_sharpe_ratio",
     "calculate_max_drawdown",
     "calculate_win_rate",
+    "monthly_returns",
+    "rolling_sharpe",
+    "rolling_volatility",
+    "holding_period_stats",
 ]
 
 
@@ -107,6 +111,104 @@ def calculate_max_drawdown(equity: pl.Series) -> float:
     rolling_max = equity.cum_max()
     drawdown = (rolling_max - equity) / rolling_max
     return drawdown.fill_nan(0.0).max()
+
+
+def monthly_returns(equity: pl.Series, dates: pl.Series) -> pl.DataFrame:
+    """Aggregate daily equity into monthly % returns table.
+
+    Args:
+        equity: Daily equity values.
+        dates: Corresponding date series (pl.Date dtype).
+
+    Returns:
+        DataFrame with columns: year (Int32), month (Int32), return_pct (Float64).
+
+    Raises:
+        ValueError: If equity or dates is empty.
+    """
+    _validate_non_empty(equity, "equity")
+    df = pl.DataFrame({"date": dates, "equity": equity}).with_columns(
+        pl.col("date").dt.year().alias("year"),
+        pl.col("date").dt.month().alias("month"),
+    )
+    monthly = (
+        df.group_by(["year", "month"])
+        .agg([
+            pl.col("equity").first().alias("equity_start"),
+            pl.col("equity").last().alias("equity_end"),
+        ])
+        .sort(["year", "month"])
+        .with_columns(
+            ((pl.col("equity_end") / pl.col("equity_start") - 1.0)).alias("return_pct")
+        )
+        .select(["year", "month", "return_pct"])
+    )
+    return monthly
+
+
+def rolling_sharpe(
+    returns: pl.Series,
+    window: int = 63,
+    risk_free_rate: float = 0.02,
+    periods_per_year: int = 252,
+) -> pl.Series:
+    """63-day rolling annualized Sharpe ratio.
+
+    Args:
+        returns: Daily return series.
+        window: Rolling window size in days (default 63 ≈ 1 quarter).
+        risk_free_rate: Annual risk-free rate (default 2%).
+        periods_per_year: Trading days per year (default 252).
+
+    Returns:
+        Series of same length as returns; first (window-1) values are null.
+    """
+    daily_rf = risk_free_rate / periods_per_year
+    excess = returns - daily_rf
+    roll_mean = excess.rolling_mean(window_size=window)
+    roll_std = returns.rolling_std(window_size=window)
+    # annualize
+    sharpe = (roll_mean / roll_std) * math.sqrt(periods_per_year)
+    return sharpe
+
+
+def rolling_volatility(
+    returns: pl.Series,
+    window: int = 63,
+    periods_per_year: int = 252,
+) -> pl.Series:
+    """63-day rolling annualized volatility.
+
+    Args:
+        returns: Daily return series.
+        window: Rolling window size in days (default 63).
+        periods_per_year: Trading days per year (default 252).
+
+    Returns:
+        Series of same length as returns; first (window-1) values are null.
+    """
+    roll_std = returns.rolling_std(window_size=window)
+    return roll_std * math.sqrt(periods_per_year)
+
+
+def holding_period_stats(trades: pl.DataFrame) -> dict:
+    """Compute mean, median, min, max holding days from a trade log.
+
+    Args:
+        trades: DataFrame with 'entry_date' and 'exit_date' integer index columns.
+
+    Returns:
+        Dict with keys: mean, median, min, max. Values are None if trades is empty.
+    """
+    if trades.is_empty():
+        return {"mean": None, "median": None, "min": None, "max": None}
+    durations = (trades["exit_date"] - trades["entry_date"]).cast(pl.Float64)
+    return {
+        "mean": durations.mean(),
+        "median": durations.median(),
+        "min": int(durations.min()),
+        "max": int(durations.max()),
+    }
 
 
 def calculate_win_rate(trades: pl.DataFrame) -> float:

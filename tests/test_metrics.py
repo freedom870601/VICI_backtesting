@@ -1,5 +1,6 @@
 """Tests for backtest/metrics.py — written before implementation (TDD Red phase)."""
 
+import datetime
 import math
 
 import polars as pl
@@ -11,6 +12,10 @@ from backtest.metrics import (
     calculate_max_drawdown,
     calculate_sharpe_ratio,
     calculate_win_rate,
+    holding_period_stats,
+    monthly_returns,
+    rolling_sharpe,
+    rolling_volatility,
 )
 
 
@@ -168,3 +173,113 @@ class TestWinRate:
         trades = pl.DataFrame({"pnl": [0.0, 100.0, -50.0]})
         result = calculate_win_rate(trades)
         assert math.isclose(result, 1 / 3, rel_tol=1e-6)
+
+
+class TestMonthlyReturns:
+    def _make_equity_and_dates(self) -> tuple[pl.Series, pl.Series]:
+        """Two full months of constant 1% daily growth (Jan + Feb 2020)."""
+        start = datetime.date(2020, 1, 2)
+        dates: list[datetime.date] = []
+        d = start
+        while len(dates) < 42:  # ~21 biz days × 2 months
+            if d.weekday() < 5:
+                dates.append(d)
+            d += datetime.timedelta(days=1)
+        equity = [100.0 * (1.01 ** i) for i in range(len(dates))]
+        return pl.Series("equity", equity), pl.Series("date", dates)
+
+    def test_monthly_returns_shape(self):
+        """Result has year, month, return_pct columns."""
+        equity, dates = self._make_equity_and_dates()
+        result = monthly_returns(equity, dates)
+        assert "year" in result.columns
+        assert "month" in result.columns
+        assert "return_pct" in result.columns
+
+    def test_monthly_returns_positive_growth(self):
+        """With 1%/day compounding equity, monthly returns must be positive."""
+        equity, dates = self._make_equity_and_dates()
+        result = monthly_returns(equity, dates)
+        assert result.height > 0
+        assert all(r > 0 for r in result["return_pct"].to_list())
+
+    def test_monthly_returns_empty_raises(self):
+        """Empty series must raise ValueError."""
+        with pytest.raises(ValueError):
+            monthly_returns(
+                pl.Series("equity", [], dtype=pl.Float64),
+                pl.Series("date", [], dtype=pl.Date),
+            )
+
+
+class TestRollingSharpe:
+    def test_rolling_sharpe_length_matches_input(self, known_returns):
+        """Output length == len(returns)."""
+        result = rolling_sharpe(known_returns, window=63)
+        assert len(result) == len(known_returns)
+
+    def test_rolling_sharpe_leading_nulls(self, known_returns):
+        """First (window-1) values must be null (insufficient data)."""
+        window = 63
+        result = rolling_sharpe(known_returns, window=window)
+        assert result[:window - 1].null_count() == window - 1
+
+    def test_rolling_sharpe_non_null_tail(self, known_returns):
+        """Values from index window onward must be non-null."""
+        window = 63
+        result = rolling_sharpe(known_returns, window=window)
+        assert result[window:].null_count() == 0
+
+
+class TestRollingVolatility:
+    def test_rolling_volatility_length_matches_input(self, known_returns):
+        """Output length == len(returns)."""
+        result = rolling_volatility(known_returns, window=63)
+        assert len(result) == len(known_returns)
+
+    def test_rolling_volatility_non_negative(self, known_returns):
+        """All non-null values must be >= 0."""
+        result = rolling_volatility(known_returns, window=63)
+        non_null = result.drop_nulls()
+        assert (non_null >= 0).all()
+
+    def test_rolling_volatility_flat_is_zero(self):
+        """Flat returns → rolling vol = 0."""
+        flat = pl.Series("returns", [0.0] * 100)
+        result = rolling_volatility(flat, window=10)
+        non_null = result.drop_nulls()
+        assert (non_null.abs() < 1e-9).all()
+
+
+class TestHoldingPeriodStats:
+    def _make_trades(self) -> pl.DataFrame:
+        return pl.DataFrame({
+            "entry_date": [0, 5, 20],
+            "exit_date": [4, 14, 30],
+            "pnl": [100.0, -50.0, 200.0],
+        })
+
+    def test_holding_period_stats_keys(self):
+        """Result dict must contain mean, median, min, max keys."""
+        trades = self._make_trades()
+        result = holding_period_stats(trades)
+        assert "mean" in result
+        assert "median" in result
+        assert "min" in result
+        assert "max" in result
+
+    def test_holding_period_stats_values(self):
+        """Known trade durations: 4, 9, 10 days."""
+        trades = self._make_trades()
+        result = holding_period_stats(trades)
+        assert result["min"] == 4
+        assert result["max"] == 10
+        assert math.isclose(result["mean"], (4 + 9 + 10) / 3, rel_tol=1e-6)
+
+    def test_holding_period_stats_empty_returns_none_values(self):
+        """Empty trade log returns dict with None/NaN for all keys."""
+        trades = pl.DataFrame({"entry_date": pl.Series([], dtype=pl.Int64),
+                               "exit_date": pl.Series([], dtype=pl.Int64),
+                               "pnl": pl.Series([], dtype=pl.Float64)})
+        result = holding_period_stats(trades)
+        assert result["mean"] is None or (result["mean"] != result["mean"])  # None or NaN

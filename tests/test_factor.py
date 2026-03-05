@@ -268,3 +268,50 @@ class TestRunLongShortBacktest:
                 bottom_n=1,
                 lookback=20,
             )
+
+
+class TestComputeMomentumScoresEdgeCases:
+    def test_empty_dict_returns_empty_dataframe(self):
+        """compute_momentum_scores({}) must return an empty DataFrame with 'date' column."""
+        result = compute_momentum_scores({}, lookback=20)
+        assert result.is_empty()
+        assert "date" in result.columns
+
+
+class TestLongShortBacktestEdgeCases:
+    def test_zero_overlap_days_returns_empty_result(self):
+        """Non-overlapping date ranges → LongShortResult with empty equity/dates/daily_returns."""
+        # Ticker A: Jan 2020; Ticker B: Jan 2021 — no date overlap
+        def _biz_dates(year: int, month: int, n: int) -> list[datetime.date]:
+            out: list[datetime.date] = []
+            d = datetime.date(year, month, 1)
+            while len(out) < n:
+                if d.weekday() < 5:
+                    out.append(d)
+                d += datetime.timedelta(days=1)
+            return out
+        dates_a = _biz_dates(2020, 1, 20)
+        dates_b = _biz_dates(2021, 1, 20)
+        prices_dict = {
+            "A": pl.DataFrame({"date": pl.Series(dates_a[:20], dtype=pl.Date), "close": pl.Series([100.0] * 20)}),
+            "B": pl.DataFrame({"date": pl.Series(dates_b[:20], dtype=pl.Date), "close": pl.Series([100.0] * 20)}),
+        }
+        result = run_long_short_backtest(prices_dict, top_n=1, bottom_n=1, lookback=5)
+        assert len(result["equity"]) == 0
+        assert len(result["dates"]) == 0
+        assert len(result["daily_returns"]) == 0
+
+    def test_empty_holdings_when_lookback_exceeds_data(self):
+        """lookback > available rows → no rebalance fires → monthly_holdings is empty with correct schema."""
+        dates = [datetime.date(2020, 1, i) for i in range(2, 12) if datetime.date(2020, 1, i).weekday() < 5]
+        prices_dict = {
+            "A": pl.DataFrame({"date": pl.Series(dates, dtype=pl.Date), "close": pl.Series([100.0] * len(dates))}),
+            "B": pl.DataFrame({"date": pl.Series(dates, dtype=pl.Date), "close": pl.Series([100.0] * len(dates))}),
+        }
+        # lookback larger than available data so compute_momentum_scores returns all NaN → no scores → no rebalance
+        result = run_long_short_backtest(prices_dict, top_n=1, bottom_n=1, lookback=500)
+        holdings = result["monthly_holdings"]
+        assert "rebal_date" in holdings.columns
+        assert "long_tickers" in holdings.columns
+        assert "short_tickers" in holdings.columns
+        assert holdings.is_empty()

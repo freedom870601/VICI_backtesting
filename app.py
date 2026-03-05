@@ -18,6 +18,10 @@ from backtest.metrics import (
     calculate_max_drawdown,
     calculate_sharpe_ratio,
     calculate_win_rate,
+    holding_period_stats,
+    monthly_returns,
+    rolling_sharpe,
+    rolling_volatility,
 )
 from backtest.strategy import generate_sma_signals
 
@@ -368,6 +372,74 @@ if mode == "📈 Single Stock":
                                 f"Total PnL: ${trades['pnl'].sum():,.2f} | "
                                 f"Win rate: {r['metrics']['win_rate']:.1%}"
                             )
+
+                # ── Advanced Analytics (single ticker only) ──────────────────────────
+                if len(ticker_results) == 1:
+                    r0 = ticker_results[0]
+                    equity_s = r0["result"]["equity"]
+                    trades_df = r0["result"]["trades"]
+                    prices_dates = pl.Series(
+                        "date",
+                        r0["prices_df"]["date"].to_list(),
+                        dtype=pl.Date,
+                    )
+
+                    with st.expander("📈 Advanced Analytics", expanded=False):
+                        # 1. Monthly / Yearly Return Table
+                        st.markdown("**Monthly Return Table**")
+                        try:
+                            monthly_df = monthly_returns(equity_s, prices_dates)
+                            display_monthly = monthly_df.with_columns(
+                                (pl.col("return_pct") * 100).round(2).alias("return_%")
+                            ).select(["year", "month", "return_%"])
+                            st.dataframe(display_monthly, use_container_width=True)
+                        except Exception as exc:
+                            st.info(f"Monthly returns unavailable: {exc}")
+
+                        st.divider()
+
+                        # 2. Rolling Metrics Chart
+                        st.markdown("**Rolling 63-Day Metrics**")
+                        try:
+                            daily_ret = equity_s.pct_change().drop_nulls()
+                            r_sharpe = rolling_sharpe(daily_ret, window=63)
+                            r_vol = rolling_volatility(daily_ret, window=63)
+                            chart_dates = prices_dates.slice(1).to_list()  # pct_change drops first
+
+                            fig_roll = go.Figure()
+                            fig_roll.add_trace(go.Scatter(
+                                x=chart_dates, y=r_sharpe.to_list(),
+                                name="Rolling Sharpe", line=dict(color="#2196F3"),
+                            ))
+                            fig_roll.add_trace(go.Scatter(
+                                x=chart_dates, y=r_vol.to_list(),
+                                name="Rolling Volatility", line=dict(color="#FF5722"),
+                                yaxis="y2",
+                            ))
+                            fig_roll.update_layout(
+                                height=350,
+                                yaxis=dict(title="Sharpe Ratio"),
+                                yaxis2=dict(title="Volatility", overlaying="y", side="right"),
+                                legend=dict(orientation="h", y=1.1),
+                                margin=dict(l=0, r=0, t=30, b=0),
+                            )
+                            st.plotly_chart(fig_roll, use_container_width=True)
+                        except Exception as exc:
+                            st.info(f"Rolling metrics unavailable: {exc}")
+
+                        st.divider()
+
+                        # 3. Holding Period Stats
+                        st.markdown("**Holding Period Statistics (days)**")
+                        if trades_df.is_empty():
+                            st.info("No trades to compute holding periods.")
+                        else:
+                            hp = holding_period_stats(trades_df)
+                            hc1, hc2, hc3, hc4 = st.columns(4)
+                            hc1.metric("Avg Days", f"{hp['mean']:.1f}" if hp["mean"] is not None else "—")
+                            hc2.metric("Median Days", f"{hp['median']:.1f}" if hp["median"] is not None else "—")
+                            hc3.metric("Min Days", str(hp["min"]) if hp["min"] is not None else "—")
+                            hc4.metric("Max Days", str(hp["max"]) if hp["max"] is not None else "—")
 
 # ── Factor Analysis ───────────────────────────────────────────────────────────
 else:
