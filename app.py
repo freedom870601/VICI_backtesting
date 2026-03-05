@@ -147,7 +147,7 @@ with st.sidebar:
         slow_window = st.slider("Slow SMA", min_value=10, max_value=300, value=50, step=1)
         sma_valid = fast_window < slow_window
         if not sma_valid:
-            st.error("Fast SMA must be less than Slow SMA.")
+            st.error("⚠️ Fast SMA must be less than Slow SMA.")
 
         initial_capital = st.number_input(
             "Initial Capital ($)", min_value=1_000, max_value=10_000_000,
@@ -161,7 +161,10 @@ with st.sidebar:
         spread_bps_val = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=0.0, step=0.5)
         entry_price_type = st.selectbox("Entry Price", ["close", "open"], index=0)
 
-        run_btn = st.button("▶ Run Backtest", type="primary", use_container_width=True)
+        run_btn = st.button(
+            "▶ Run Backtest", type="primary", use_container_width=True,
+            disabled=not sma_valid,
+        )
         run_factor_btn = False
 
     # ── Factor Analysis sidebar ──────────────────────────────────────────────
@@ -172,6 +175,15 @@ with st.sidebar:
             "Stock Universe (comma-separated)",
             value="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM",
         )
+
+        fc1, fc2 = st.columns(2)
+        with fc1:
+            factor_start = st.date_input("Start Date", value=datetime.date(2020, 1, 1))
+        with fc2:
+            factor_end   = st.date_input("End Date",   value=datetime.date(2024, 1, 1))
+
+        st.markdown("---")
+        st.subheader("Long-Short Settings")
         factor_top_n    = st.number_input("Long Top N", min_value=1, max_value=20, value=3)
         factor_bottom_n = st.number_input("Short Bottom N", min_value=1, max_value=20, value=3)
 
@@ -183,11 +195,6 @@ with st.sidebar:
         st.subheader("Transaction Costs")
         factor_commission = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.10, step=0.01)
         factor_spread     = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=5.0, step=0.5)
-
-        st.markdown("---")
-        st.subheader("Date Range")
-        factor_start = st.date_input("Start Date", value=datetime.date(2020, 1, 1))
-        factor_end   = st.date_input("End Date",   value=datetime.date(2024, 1, 1))
 
         run_factor_btn = st.button("▶ Run Factor Analysis", type="primary", use_container_width=True)
         run_btn = False
@@ -201,8 +208,6 @@ with st.sidebar:
 if mode == "📈 Single Stock":
     if not run_btn:
         st.info("Configure parameters in the sidebar and click **Run Backtest** to start.")
-    elif not sma_valid:
-        st.error("Fast SMA must be less than Slow SMA.")
     else:
         tickers = parse_tickers(raw_tickers)
         if not tickers:
@@ -242,85 +247,91 @@ if mode == "📈 Single Stock":
                     except Exception:
                         spy_df = None
 
-                # Metrics
-                st.subheader("📊 Performance Metrics")
-                if len(ticker_results) == 1:
-                    m = ticker_results[0]["metrics"]
-                    c1, c2, c3, c4, c5 = st.columns(5)
-                    c1.metric("CAGR", f"{m['cagr']:.1%}")
-                    c2.metric("Ann. Volatility", f"{m['vol']:.1%}")
-                    c3.metric("Sharpe Ratio", f"{m['sharpe']:.2f}")
-                    c4.metric("Max Drawdown", f"{m['mdd']:.1%}")
-                    c5.metric("Win Rate", f"{m['win_rate']:.1%}")
-                else:
-                    rows = []
-                    for r in ticker_results:
-                        m = r["metrics"]
-                        rows.append({
-                            "Ticker": r["ticker"],
-                            "CAGR": f"{m['cagr']:.1%}",
-                            "Ann. Vol": f"{m['vol']:.1%}",
-                            "Sharpe": f"{m['sharpe']:.2f}",
-                            "Max Drawdown": f"{m['mdd']:.1%}",
-                            "Win Rate": f"{m['win_rate']:.1%}",
-                        })
-                    st.dataframe(pl.DataFrame(rows), use_container_width=True)
+                tab_overview, tab_charts, tab_trades, tab_advanced = st.tabs([
+                    "📊 Overview", "📉 Charts", "📋 Trades", "🔬 Advanced"
+                ])
 
-                # Equity curves
-                st.subheader("📉 Equity Curves (Normalized to 100)")
-                fig = go.Figure()
-                for idx, r in enumerate(ticker_results):
-                    equity_list = r["result"]["equity"].to_list()
-                    dates = r["prices_df"]["date"].to_list()
-                    first_val = equity_list[0] if equity_list[0] != 0 else 1.0
-                    normalized = [v / first_val * 100 for v in equity_list]
-                    color = _TICKER_COLORS[idx % len(_TICKER_COLORS)]
-                    fig.add_trace(go.Scatter(
-                        x=dates, y=normalized, mode="lines",
-                        name=r["ticker"], line=dict(color=color, width=2),
-                    ))
+                # ── Tab 1: Overview ──────────────────────────────────────────────
+                with tab_overview:
                     if len(ticker_results) == 1:
-                        sigs = r["signals"]["signal"].to_list()
-                        buy_idx  = [i for i, s in enumerate(sigs) if s == 1]
-                        sell_idx = [i for i, s in enumerate(sigs) if s == -1]
-                        if buy_idx:
-                            fig.add_trace(go.Scatter(
-                                x=[dates[i] for i in buy_idx],
-                                y=[normalized[i] for i in buy_idx],
-                                mode="markers", name="BUY",
-                                marker=dict(symbol="triangle-up", size=10, color="green"),
-                            ))
-                        if sell_idx:
-                            fig.add_trace(go.Scatter(
-                                x=[dates[i] for i in sell_idx],
-                                y=[normalized[i] for i in sell_idx],
-                                mode="markers", name="SELL",
-                                marker=dict(symbol="triangle-down", size=10, color="red"),
-                            ))
+                        m = ticker_results[0]["metrics"]
+                        c1, c2, c3, c4, c5 = st.columns(5)
+                        c1.metric("CAGR", f"{m['cagr']:.1%}")
+                        c2.metric("Ann. Volatility", f"{m['vol']:.1%}")
+                        c3.metric("Sharpe Ratio", f"{m['sharpe']:.2f}")
+                        c4.metric("Max Drawdown", f"{m['mdd']:.1%}")
+                        c5.metric("Win Rate", f"{m['win_rate']:.1%}")
+                    else:
+                        rows = []
+                        for r in ticker_results:
+                            m = r["metrics"]
+                            rows.append({
+                                "Ticker": r["ticker"],
+                                "CAGR": f"{m['cagr']:.1%}",
+                                "Ann. Vol": f"{m['vol']:.1%}",
+                                "Sharpe": f"{m['sharpe']:.2f}",
+                                "Max Drawdown": f"{m['mdd']:.1%}",
+                                "Win Rate": f"{m['win_rate']:.1%}",
+                            })
+                        st.dataframe(pl.DataFrame(rows), use_container_width=True)
 
-                if spy_df is not None:
-                    spy_closes = spy_df["close"].to_list()
-                    spy_norm = [c / spy_closes[0] * 100 for c in spy_closes]
-                    fig.add_trace(go.Scatter(
-                        x=spy_df["date"].to_list(), y=spy_norm, mode="lines",
-                        name="SPY (Buy & Hold)",
-                        line=dict(color="#ff7f0e", width=2, dash="dash"),
-                    ))
+                # ── Tab 2: Charts ────────────────────────────────────────────────
+                with tab_charts:
+                    st.subheader("Equity Curves (Normalized to 100)")
+                    fig = go.Figure()
+                    for idx, r in enumerate(ticker_results):
+                        equity_list = r["result"]["equity"].to_list()
+                        dates = r["prices_df"]["date"].to_list()
+                        first_val = equity_list[0] if equity_list[0] != 0 else 1.0
+                        normalized = [v / first_val * 100 for v in equity_list]
+                        color = _TICKER_COLORS[idx % len(_TICKER_COLORS)]
+                        fig.add_trace(go.Scatter(
+                            x=dates, y=normalized, mode="lines",
+                            name=r["ticker"], line=dict(color=color, width=2),
+                        ))
+                        if len(ticker_results) == 1:
+                            sigs = r["signals"]["signal"].to_list()
+                            buy_idx  = [i for i, s in enumerate(sigs) if s == 1]
+                            sell_idx = [i for i, s in enumerate(sigs) if s == -1]
+                            if buy_idx:
+                                fig.add_trace(go.Scatter(
+                                    x=[dates[i] for i in buy_idx],
+                                    y=[normalized[i] for i in buy_idx],
+                                    mode="markers", name="BUY",
+                                    marker=dict(symbol="triangle-up", size=10, color="green"),
+                                ))
+                            if sell_idx:
+                                fig.add_trace(go.Scatter(
+                                    x=[dates[i] for i in sell_idx],
+                                    y=[normalized[i] for i in sell_idx],
+                                    mode="markers", name="SELL",
+                                    marker=dict(symbol="triangle-down", size=10, color="red"),
+                                ))
 
-                fig.update_layout(
-                    xaxis_title="Date", yaxis_title="Normalized Value (base 100)",
-                    hovermode="x unified",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    height=500, margin=dict(l=0, r=0, t=30, b=0),
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                    if spy_df is not None:
+                        spy_closes = spy_df["close"].to_list()
+                        spy_norm = [c / spy_closes[0] * 100 for c in spy_closes]
+                        fig.add_trace(go.Scatter(
+                            x=spy_df["date"].to_list(), y=spy_norm, mode="lines",
+                            name="SPY (Buy & Hold)",
+                            line=dict(color="#ff7f0e", width=2, dash="dash"),
+                        ))
 
-                # SMA price chart
-                if len(ticker_results) == 1:
-                    r = ticker_results[0]
-                    dates = r["prices_df"]["date"].to_list()
-                    sigs = r["signals"]
-                    with st.expander("📈 Price & SMA Chart"):
+                    fig.update_layout(
+                        template="plotly_dark",
+                        xaxis_title="Date", yaxis_title="Normalized Value (base 100)",
+                        hovermode="x unified",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        height=500, margin=dict(l=0, r=0, t=30, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    if len(ticker_results) == 1:
+                        st.subheader("Price & SMA Chart")
+                        r = ticker_results[0]
+                        dates = r["prices_df"]["date"].to_list()
+                        sigs = r["signals"]
                         fig2 = go.Figure()
                         fig2.add_trace(go.Scatter(
                             x=dates, y=r["prices_df"]["close"].to_list(),
@@ -335,17 +346,20 @@ if mode == "📈 Single Stock":
                             name=f"Slow SMA ({slow_window})", line=dict(color="orange"),
                         ))
                         fig2.update_layout(
+                            template="plotly_dark",
                             height=400, xaxis_title="Date", yaxis_title="Price ($)",
                             margin=dict(l=0, r=0, t=10, b=0),
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                         )
                         st.plotly_chart(fig2, use_container_width=True)
 
-                # Trade logs
-                st.subheader("📋 Trade Logs")
-                for r in ticker_results:
-                    trades = r["result"]["trades"]
-                    dates = r["prices_df"]["date"].to_list()
-                    with st.expander(f"{r['ticker']} — Trade Log"):
+                # ── Tab 3: Trades ────────────────────────────────────────────────
+                with tab_trades:
+                    for r in ticker_results:
+                        trades = r["result"]["trades"]
+                        dates = r["prices_df"]["date"].to_list()
+                        if len(ticker_results) > 1:
+                            st.subheader(r["ticker"])
                         if trades.is_empty():
                             st.info("No completed trades in the selected period.")
                         else:
@@ -372,21 +386,24 @@ if mode == "📈 Single Stock":
                                 f"Total PnL: ${trades['pnl'].sum():,.2f} | "
                                 f"Win rate: {r['metrics']['win_rate']:.1%}"
                             )
+                        if len(ticker_results) > 1:
+                            st.divider()
 
-                # ── Advanced Analytics (single ticker only) ──────────────────────────
-                if len(ticker_results) == 1:
-                    r0 = ticker_results[0]
-                    equity_s = r0["result"]["equity"]
-                    trades_df = r0["result"]["trades"]
-                    prices_dates = pl.Series(
-                        "date",
-                        r0["prices_df"]["date"].to_list(),
-                        dtype=pl.Date,
-                    )
+                # ── Tab 4: Advanced (single ticker only) ────────────────────────
+                with tab_advanced:
+                    if len(ticker_results) > 1:
+                        st.info("Advanced analytics are available for single-ticker backtests only.")
+                    else:
+                        r0 = ticker_results[0]
+                        equity_s = r0["result"]["equity"]
+                        trades_df = r0["result"]["trades"]
+                        prices_dates = pl.Series(
+                            "date",
+                            r0["prices_df"]["date"].to_list(),
+                            dtype=pl.Date,
+                        )
 
-                    with st.expander("📈 Advanced Analytics", expanded=False):
-                        # 1. Monthly / Yearly Return Table
-                        st.markdown("**Monthly Return Table**")
+                        st.subheader("Monthly Return Table")
                         try:
                             monthly_df = monthly_returns(equity_s, prices_dates)
                             display_monthly = monthly_df.with_columns(
@@ -398,13 +415,12 @@ if mode == "📈 Single Stock":
 
                         st.divider()
 
-                        # 2. Rolling Metrics Chart
-                        st.markdown("**Rolling 63-Day Metrics**")
+                        st.subheader("Rolling 63-Day Metrics")
                         try:
                             daily_ret = equity_s.pct_change().drop_nulls()
                             r_sharpe = rolling_sharpe(daily_ret, window=63)
                             r_vol = rolling_volatility(daily_ret, window=63)
-                            chart_dates = prices_dates.slice(1).to_list()  # pct_change drops first
+                            chart_dates = prices_dates.slice(1).to_list()
 
                             fig_roll = go.Figure()
                             fig_roll.add_trace(go.Scatter(
@@ -417,11 +433,13 @@ if mode == "📈 Single Stock":
                                 yaxis="y2",
                             ))
                             fig_roll.update_layout(
+                                template="plotly_dark",
                                 height=350,
                                 yaxis=dict(title="Sharpe Ratio"),
                                 yaxis2=dict(title="Volatility", overlaying="y", side="right"),
                                 legend=dict(orientation="h", y=1.1),
                                 margin=dict(l=0, r=0, t=30, b=0),
+                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                             )
                             st.plotly_chart(fig_roll, use_container_width=True)
                         except Exception as exc:
@@ -429,8 +447,7 @@ if mode == "📈 Single Stock":
 
                         st.divider()
 
-                        # 3. Holding Period Stats
-                        st.markdown("**Holding Period Statistics (days)**")
+                        st.subheader("Holding Period Statistics (days)")
                         if trades_df.is_empty():
                             st.info("No trades to compute holding periods.")
                         else:
@@ -500,7 +517,32 @@ else:
                         except Exception:
                             pass
 
-                    # CAPM metrics
+                    # ── Portfolio performance metrics ─────────────────────────
+                    st.subheader("📊 Portfolio Performance")
+                    ls_equity_s = ls_result["equity"]
+                    ls_daily_ret = ls_result["daily_returns"]
+                    fa1, fa2, fa3, fa4, fa5 = st.columns(5)
+                    try:
+                        fa1.metric("CAGR", f"{calculate_cagr(ls_equity_s):.1%}")
+                    except Exception:
+                        fa1.metric("CAGR", "—")
+                    try:
+                        fa2.metric("Ann. Volatility", f"{calculate_annualized_volatility(ls_daily_ret):.1%}" if len(ls_daily_ret) > 0 else "—")
+                    except Exception:
+                        fa2.metric("Ann. Volatility", "—")
+                    try:
+                        fa3.metric("Sharpe Ratio", f"{calculate_sharpe_ratio(ls_daily_ret):.2f}" if len(ls_daily_ret) > 0 else "—")
+                    except Exception:
+                        fa3.metric("Sharpe Ratio", "—")
+                    try:
+                        fa4.metric("Max Drawdown", f"{calculate_max_drawdown(ls_equity_s):.1%}")
+                    except Exception:
+                        fa4.metric("Max Drawdown", "—")
+                    fa5.metric("Rebalances", str(ls_result["monthly_holdings"].height))
+
+                    st.divider()
+
+                    # ── CAPM metrics ──────────────────────────────────────────
                     st.subheader("📐 CAPM Regression")
                     port_returns = ls_result["daily_returns"]
                     if spy_returns_raw is not None and len(port_returns) >= 3:
@@ -521,7 +563,7 @@ else:
                     else:
                         st.warning("Insufficient data or SPY download failed — CAPM metrics unavailable.")
 
-                    # Equity curve
+                    # ── Equity curve ──────────────────────────────────────────
                     st.subheader("📉 Long-Short Portfolio Equity Curve")
                     ls_equity = ls_result["equity"].to_list()
                     ls_dates  = ls_result["dates"].to_list()
@@ -546,14 +588,16 @@ else:
                         ))
 
                     fig_ls.update_layout(
+                        template="plotly_dark",
                         xaxis_title="Date", yaxis_title="Normalized Value (base 100)",
                         hovermode="x unified",
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                         height=500, margin=dict(l=0, r=0, t=30, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     )
                     st.plotly_chart(fig_ls, use_container_width=True)
 
-                    # Monthly holdings
+                    # ── Monthly holdings ──────────────────────────────────────
                     st.subheader("📅 Monthly Holdings")
                     holdings = ls_result["monthly_holdings"]
                     if holdings.is_empty():
