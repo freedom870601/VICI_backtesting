@@ -70,6 +70,9 @@ Slippage and spread model different costs (market impact vs. bid-ask crossing) a
 
 **Entry Price** selectbox: choose `close` (default) or `open` — determines the price used for BUY fills. Useful for next-bar execution simulation.
 
+### Hover Tooltips
+All sidebar inputs and metric cards include a `(?)` help icon with plain-English explanations of financial terms (CAGR, Sharpe Ratio, Beta, SMA, etc.), making the dashboard accessible to non-expert users.
+
 ### Multi-Stock Comparison
 - Enter multiple tickers as a comma-separated list (e.g. `AAPL, MSFT, GOOG`).
 - Invalid or unavailable tickers show a warning and are skipped; valid ones still run.
@@ -149,6 +152,9 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 8c | `feat(app)` | Transaction costs UI, multi-stock comparison, entry price selectbox |
 | 9 | `feat(factor)` | Factor analysis: long-short backtest, CAPM regression, monthly holdings |
 | 10 | `refactor(strategy)` | Remove single-stock momentum; SMA Crossover is the only single-stock strategy |
+| 11 | `feat(metrics)` | Add monthly returns, rolling Sharpe/vol, holding period stats |
+| 12 | `feat(app)` | Reorganize single-stock results into tabs; add dark theme |
+| 13 | `feat(app)` | Add hover tooltips (`help=`) on all sidebar inputs and metric cards |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
@@ -168,7 +174,7 @@ backtest/strategy.py      13      0   100%
 ------------------------------------------
 TOTAL                    272     11    96%
 ```
-84 tests passing.
+101 tests passing.
 
 ---
 

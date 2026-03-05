@@ -143,8 +143,8 @@ with st.sidebar:
             end_date = st.date_input("End Date", value=datetime.date(2024, 1, 1))
 
         st.subheader("SMA Windows")
-        fast_window = st.slider("Fast SMA", min_value=5, max_value=100, value=20, step=1)
-        slow_window = st.slider("Slow SMA", min_value=10, max_value=300, value=50, step=1)
+        fast_window = st.slider("Fast SMA", min_value=5, max_value=100, value=20, step=1, help="Fast Simple Moving Average window (days). A shorter window reacts quickly to price changes.")
+        slow_window = st.slider("Slow SMA", min_value=10, max_value=300, value=50, step=1, help="Slow Simple Moving Average window (days). A longer window reflects the broader trend.")
         sma_valid = fast_window < slow_window
         if not sma_valid:
             st.error("⚠️ Fast SMA must be less than Slow SMA.")
@@ -156,10 +156,10 @@ with st.sidebar:
 
         st.markdown("---")
         st.subheader("Transaction Costs")
-        commission_pct = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.00, step=0.01)
-        slippage_pct   = st.slider("Slippage (%)",   min_value=0.00, max_value=2.00, value=0.00, step=0.01)
-        spread_bps_val = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=0.0, step=0.5)
-        entry_price_type = st.selectbox("Entry Price", ["close", "open"], index=0)
+        commission_pct = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.00, step=0.01, help="Broker fee charged per trade, as a percentage of the trade value.")
+        slippage_pct   = st.slider("Slippage (%)",   min_value=0.00, max_value=2.00, value=0.00, step=0.01, help="Estimated price impact: the difference between the expected and actual fill price.")
+        spread_bps_val = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=0.0, step=0.5, help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
+        entry_price_type = st.selectbox("Entry Price", ["close", "open"], index=0, help="'close' fills at today's closing price; 'open' fills at the next bar's opening price.")
 
         run_btn = st.button(
             "▶ Run Backtest", type="primary", use_container_width=True,
@@ -184,17 +184,17 @@ with st.sidebar:
 
         st.markdown("---")
         st.subheader("Long-Short Settings")
-        factor_top_n    = st.number_input("Long Top N", min_value=1, max_value=20, value=3)
-        factor_bottom_n = st.number_input("Short Bottom N", min_value=1, max_value=20, value=3)
+        factor_top_n    = st.number_input("Long Top N", min_value=1, max_value=20, value=3, help="Number of highest-momentum stocks to go long (buy) each rebalance period.")
+        factor_bottom_n = st.number_input("Short Bottom N", min_value=1, max_value=20, value=3, help="Number of lowest-momentum stocks to go short (sell) each rebalance period.")
 
         st.markdown("---")
         st.subheader("Strategy")
-        factor_lookback = st.slider("Momentum Lookback (days)", min_value=20, max_value=252, value=63, step=1)
+        factor_lookback = st.slider("Momentum Lookback (days)", min_value=20, max_value=252, value=63, step=1, help="Look-back window used to rank stocks by past return. Longer = slower-changing rankings.")
 
         st.markdown("---")
         st.subheader("Transaction Costs")
-        factor_commission = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.10, step=0.01)
-        factor_spread     = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=5.0, step=0.5)
+        factor_commission = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.10, step=0.01, help="Broker fee charged per trade, as a percentage of the trade value.")
+        factor_spread     = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=5.0, step=0.5, help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
 
         run_factor_btn = st.button("▶ Run Factor Analysis", type="primary", use_container_width=True)
         run_btn = False
@@ -256,11 +256,11 @@ if mode == "📈 Single Stock":
                     if len(ticker_results) == 1:
                         m = ticker_results[0]["metrics"]
                         c1, c2, c3, c4, c5 = st.columns(5)
-                        c1.metric("CAGR", f"{m['cagr']:.1%}")
-                        c2.metric("Ann. Volatility", f"{m['vol']:.1%}")
-                        c3.metric("Sharpe Ratio", f"{m['sharpe']:.2f}")
-                        c4.metric("Max Drawdown", f"{m['mdd']:.1%}")
-                        c5.metric("Win Rate", f"{m['win_rate']:.1%}")
+                        c1.metric("CAGR", f"{m['cagr']:.1%}", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
+                        c2.metric("Ann. Volatility", f"{m['vol']:.1%}", help="Annualized standard deviation of daily returns — a measure of risk.")
+                        c3.metric("Sharpe Ratio", f"{m['sharpe']:.2f}", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
+                        c4.metric("Max Drawdown", f"{m['mdd']:.1%}", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
+                        c5.metric("Win Rate", f"{m['win_rate']:.1%}", help="Proportion of completed trades that were profitable.")
                     else:
                         rows = []
                         for r in ticker_results:
@@ -453,10 +453,10 @@ if mode == "📈 Single Stock":
                         else:
                             hp = holding_period_stats(trades_df)
                             hc1, hc2, hc3, hc4 = st.columns(4)
-                            hc1.metric("Avg Days", f"{hp['mean']:.1f}" if hp["mean"] is not None else "—")
-                            hc2.metric("Median Days", f"{hp['median']:.1f}" if hp["median"] is not None else "—")
-                            hc3.metric("Min Days", str(hp["min"]) if hp["min"] is not None else "—")
-                            hc4.metric("Max Days", str(hp["max"]) if hp["max"] is not None else "—")
+                            hc1.metric("Avg Days", f"{hp['mean']:.1f}" if hp["mean"] is not None else "—", help="Mean number of calendar days a position was held.")
+                            hc2.metric("Median Days", f"{hp['median']:.1f}" if hp["median"] is not None else "—", help="Median holding duration — less sensitive to outlier trades.")
+                            hc3.metric("Min Days", str(hp["min"]) if hp["min"] is not None else "—", help="Shortest holding period among all completed trades.")
+                            hc4.metric("Max Days", str(hp["max"]) if hp["max"] is not None else "—", help="Longest holding period among all completed trades.")
 
 # ── Factor Analysis ───────────────────────────────────────────────────────────
 else:
@@ -523,22 +523,22 @@ else:
                     ls_daily_ret = ls_result["daily_returns"]
                     fa1, fa2, fa3, fa4, fa5 = st.columns(5)
                     try:
-                        fa1.metric("CAGR", f"{calculate_cagr(ls_equity_s):.1%}")
+                        fa1.metric("CAGR", f"{calculate_cagr(ls_equity_s):.1%}", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
                     except Exception:
-                        fa1.metric("CAGR", "—")
+                        fa1.metric("CAGR", "—", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
                     try:
-                        fa2.metric("Ann. Volatility", f"{calculate_annualized_volatility(ls_daily_ret):.1%}" if len(ls_daily_ret) > 0 else "—")
+                        fa2.metric("Ann. Volatility", f"{calculate_annualized_volatility(ls_daily_ret):.1%}" if len(ls_daily_ret) > 0 else "—", help="Annualized standard deviation of daily returns — a measure of risk.")
                     except Exception:
-                        fa2.metric("Ann. Volatility", "—")
+                        fa2.metric("Ann. Volatility", "—", help="Annualized standard deviation of daily returns — a measure of risk.")
                     try:
-                        fa3.metric("Sharpe Ratio", f"{calculate_sharpe_ratio(ls_daily_ret):.2f}" if len(ls_daily_ret) > 0 else "—")
+                        fa3.metric("Sharpe Ratio", f"{calculate_sharpe_ratio(ls_daily_ret):.2f}" if len(ls_daily_ret) > 0 else "—", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
                     except Exception:
-                        fa3.metric("Sharpe Ratio", "—")
+                        fa3.metric("Sharpe Ratio", "—", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
                     try:
-                        fa4.metric("Max Drawdown", f"{calculate_max_drawdown(ls_equity_s):.1%}")
+                        fa4.metric("Max Drawdown", f"{calculate_max_drawdown(ls_equity_s):.1%}", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
                     except Exception:
-                        fa4.metric("Max Drawdown", "—")
-                    fa5.metric("Rebalances", str(ls_result["monthly_holdings"].height))
+                        fa4.metric("Max Drawdown", "—", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
+                    fa5.metric("Rebalances", str(ls_result["monthly_holdings"].height), help="Number of monthly portfolio rebalancing events during the backtest.")
 
                     st.divider()
 
@@ -553,11 +553,11 @@ else:
                                 spy_returns_raw[-min_len:],
                             )
                             ca, cb, cc, cd, ce = st.columns(5)
-                            ca.metric("Ann. Alpha", f"{capm['alpha']:.2%}")
-                            cb.metric("Beta", f"{capm['beta']:.3f}")
-                            cc.metric("t(Alpha)", f"{capm['t_alpha']:.2f}")
-                            cd.metric("t(Beta)", f"{capm['t_beta']:.2f}")
-                            ce.metric("R²", f"{capm['r_squared']:.3f}")
+                            ca.metric("Ann. Alpha", f"{capm['alpha']:.2%}", help="Annualized excess return above what CAPM predicts. Positive = outperformed the market.")
+                            cb.metric("Beta", f"{capm['beta']:.3f}", help="Sensitivity to market moves. β > 1: more volatile than market; β < 1: less volatile.")
+                            cc.metric("t(Alpha)", f"{capm['t_alpha']:.2f}", help="t-statistic for alpha. Values beyond ±2 suggest statistical significance.")
+                            cd.metric("t(Beta)", f"{capm['t_beta']:.2f}", help="t-statistic for beta. Values beyond ±2 suggest statistical significance.")
+                            ce.metric("R²", f"{capm['r_squared']:.3f}", help="Proportion of portfolio return variance explained by market returns (0–1).")
                         except ValueError as exc:
                             st.warning(f"CAPM regression failed: {exc}")
                     else:
