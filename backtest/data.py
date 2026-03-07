@@ -50,6 +50,7 @@ def fetch_prices(ticker: str, start: str, end: str) -> pl.DataFrame:
     # Ensure correct dtypes, drop nulls on close, fill open nulls with close, sort ascending
     df = (
         df.with_columns(
+            pl.col("date").cast(pl.Date),
             pl.col("open").cast(pl.Float64),
             pl.col("close").cast(pl.Float64),
         )

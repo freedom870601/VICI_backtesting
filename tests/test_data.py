@@ -116,3 +116,12 @@ class TestFetchPrices:
         assert abs(result["open"][0] - 100.0) < 1e-9
         # Row 2 open NaN → fallback to close 102.0
         assert abs(result["open"][2] - 102.0) < 1e-9
+
+    def test_date_column_is_pl_date(self, monkeypatch):
+        """The 'date' column must be pl.Date dtype (not Datetime or Datetime[tz])."""
+        dates = [datetime.date(2023, 1, i) for i in range(1, 6)]
+        mock_df = _make_yf_response(dates, [100.0, 101.0, 102.0, 103.0, 104.0])
+
+        monkeypatch.setattr("yfinance.download", lambda *a, **kw: mock_df)
+        result = fetch_prices("AAPL", "2023-01-01", "2023-01-05")
+        assert result["date"].dtype == pl.Date

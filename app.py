@@ -28,6 +28,74 @@ from backtest.metrics import (
 from backtest.strategy import generate_sma_signals
 
 logging.basicConfig(level=logging.INFO)
+
+UNIVERSES: dict[str, list[str]] = {
+    "S&P 100": [
+        "AAPL","MSFT","AMZN","NVDA","GOOGL","META","BRK-B","LLY","AVGO","TSLA",
+        "WMT","JPM","V","XOM","UNH","ORCL","MA","COST","HD","PG","JNJ","ABBV",
+        "BAC","NFLX","KO","CRM","CVX","MRK","AMD","PEP","TMO","ACN","LIN","MCD",
+        "CSCO","IBM","GE","PM","NOW","CAT","TXN","ISRG","INTU","AMGN","GS","SPGI",
+        "HON","BLK","AXP","VZ","MS","DE","BKNG","GILD","SYK","T","PLD","RTX","ADP",
+        "VRTX","ADI","MDLZ","SCHW","TJX","MMC","CB","REGN","ETN","MO","CI","PGR",
+        "CME","BMY","LRCX","SO","EOG","BDX","ITW","ZTS","AON","SLB","DUK","WM",
+        "USB","MCO","CL","PH","APH","TT","EMR","HUM","NOC","GD","EQIX","NSC",
+        "APD","OKE",
+    ],
+    "NASDAQ-100": [
+        "AAPL","MSFT","NVDA","AMZN","META","TSLA","GOOGL","GOOG","AVGO","COST",
+        "NFLX","AMD","TMUS","ASML","CSCO","AZN","INTU","PEP","ADBE","QCOM","AMAT",
+        "TXN","AMGN","ISRG","MU","HON","BKNG","VRTX","REGN","LRCX","PANW","ADI",
+        "SBUX","MDLZ","GILD","ADP","MELI","CTAS","SNPS","CDNS","KLAC","MAR","FTNT",
+        "ABNB","ORLY","CHTR","DASH","WDAY","MRVL","PCAR","MNST","PAYX","CRWD","KDP",
+        "ROST","NXPI","CSX","AEP","EA","ODFL","FAST","EXC","GEHC","XEL","IDXX","KHC",
+        "FANG","ON","CTSH","VRSK","BIIB","DDOG","ANSS","CSGP","TEAM","WBD","DLTR",
+        "GFS","ILMN","TTD","ZS","ALGN","DXCM","CPRT","MRNA","OKTA","EBAY","CEG",
+        "ENPH","MCHP","LULU","CDW","TTWO","ADSK","ROP","ARM","PLTR",
+    ],
+    "S&P 500": [
+        "MMM","AOS","ABT","ABBV","ACN","ADBE","AMD","AES","AFL","A","APD","AKAM",
+        "ALK","ALB","ARE","ALGN","ALLE","LNT","ALL","GOOGL","GOOG","MO","AMZN",
+        "AMCR","AEE","AAL","AEP","AXP","AIG","AMT","AWK","AMP","AME","AMGN","APH",
+        "ADI","ANSS","AON","APA","AAPL","AMAT","APTV","ACGL","ADM","ANET",
+        "AJG","AIZ","T","ATO","ADSK","AZO","AVB","AVY","AXON","BKR","BALL","BAC",
+        "BBWI","BAX","BDX","BRK-B","BBY","BIO","TECH","BIIB","BLK","BX","BA",
+        "BMY","AVGO","BR","BRO","BLDR","BG","CDNS","CZR","CPT","CPB",
+        "COF","CAH","KMX","CCL","CARR","CAT","CBOE","CBRE","CDW","CE","COR","CNC",
+        "CDAY","CF","CRL","SCHW","CHTR","CVX","CMG","CB","CHD","CI","CINF",
+        "CTAS","CSCO","C","CFG","CLX","CME","CMS","KO","CTSH","CL","CMCSA","CMA",
+        "CAG","COP","ED","STZ","CEG","COO","CPRT","GLW","CPAY","CTLT","CRM",
+        "CTRA","CSX","CMI","CVS","DHI","DHR","DRI","DVA","DAY","DECK","DE","DAL",
+        "DVN","DXCM","FANG","DLR","DFS","DG","DLTR","D","DPZ","DOV","DOW","DTE",
+        "DUK","DD","EMN","ETN","EBAY","ECL","EIX","EW","EA","ELV","EMR","ENPH",
+        "ETR","EOG","EPAM","EQT","EFX","EQIX","EQR","ESS","EL","ETSY","EG","EVRG",
+        "ES","EXC","EXPE","EXPD","EXR","XOM","FFIV","FDS","FICO","FAST","FRT","FDX",
+        "FIS","FITB","FSLR","FE","FLT","FMC","F","FTNT","FTV","FOXA","FOX",
+        "BEN","FCX","GRMN","IT","GE","GEHC","GEN","GIS","GM","GPC","GILD","GPN",
+        "GL","GS","HAL","HIG","HAS","HCA","DOC","HSIC","HSY","HES","HPE","HLT",
+        "HOLX","HD","HON","HRL","HST","HWM","HPQ","HUBB","HUM","HBAN","HII","IBM",
+        "IEX","IDXX","ITW","INCY","IR","PODD","INTC","ICE","IFF","IP","IPG","INTU",
+        "ISRG","IVZ","INVH","IQV","IRM","JBHT","JBL","JKHY","J","JNJ","JCI","JPM",
+        "K","KDP","KEY","KEYS","KMB","KIM","KMI","KLAC","KHC","KR",
+        "LHX","LH","LRCX","LW","LVS","LDOS","LEN","LLY","LIN","LYV","LKQ","LMT",
+        "L","LOW","LULU","LYB","MTB","MRO","MPC","MKTX","MAR","MMC","MLM","MAS",
+        "MA","MTCH","MKC","MCD","MCK","MDT","MRK","META","MET","MTD","MGM","MCHP",
+        "MU","MSFT","MAA","MRNA","MHK","MOH","TAP","MDLZ","MPWR","MNST","MCO","MS",
+        "MOS","MSI","MSCI","NDAQ","NTAP","NWSA","NWS","NEE","NKE","NEM","NFLX",
+        "NWL","NRG","NUE","NVDA","NVR","NXPI","ORLY","OXY","ODFL","OMC","ON","OKE",
+        "ORCL","OTIS","PCAR","PKG","PANW","PH","PAYX","PAYC","PYPL","PNR","PEP","PFE",
+        "PCG","PM","PSX","PNW","PNC","POOL","PPG","PPL","PFG","PG","PGR","PLD","PRU",
+        "PEG","PTC","PSA","PHM","QRVO","PWR","QCOM","DGX","RL","RJF","RTX","O","REG",
+        "REGN","RF","RSG","RMD","RVTY","ROK","ROL","ROP","ROST","RCL","SPGI",
+        "SBAC","SLB","STX","SRE","NOW","SHW","SPG","SWKS","SJM","SNA","SO",
+        "LUV","SWK","SBUX","STT","STLD","STE","SYK","SMCI","SYF","SNPS","SYY","TMUS",
+        "TROW","TTWO","TPR","TRGP","TGT","TEL","TDY","TFX","TER","TSLA","TXN","TXT",
+        "TMO","TJX","TSCO","TT","TDG","TRV","TRMB","TFC","TYL","TSN","USB","UBER",
+        "UDR","ULTA","UNP","UAL","UPS","URI","UNH","UHS","VLO","VTR","VRSN",
+        "VRSK","VZ","VRTX","VTRS","VICI","V","VST","VNO","VMC","WAB","WMT",
+        "WBD","WM","WAT","WEC","WFC","WELL","WST","WDC","WY","WHR","WMB","WTW","WRB",
+        "GWW","WYNN","XEL","XYL","YUM","ZBRA","ZBH","ZTS",
+    ],
+}
 logger = logging.getLogger(__name__)
 
 
@@ -124,10 +192,339 @@ def run_ticker_pipeline(
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="VICI Backtesting", page_icon="📈", layout="wide")
-st.title("📈 US Stock Backtesting System")
-st.caption("Strategy: SMA Crossover | Benchmark: Buy & Hold SPY")
+
+# ── Global CSS: dark financial terminal theme ─────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ── Root palette ──────────────────────────────────────────────────────── */
+:root {
+    --bg-base:      #080c12;
+    --bg-surface:   #0d1420;
+    --bg-elevated:  #121a28;
+    --bg-border:    #1e2d42;
+    --accent-green: #00e87a;
+    --accent-blue:  #3b82f6;
+    --accent-red:   #f43f5e;
+    --accent-gold:  #f0c040;
+    --text-primary: #e2e8f0;
+    --text-muted:   #64748b;
+    --text-faint:   #334155;
+}
+
+/* ── App-wide background & font ────────────────────────────────────────── */
+.stApp, .stApp > * {
+    background-color: var(--bg-base) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    color: var(--text-primary) !important;
+}
+
+/* hide default streamlit header bar */
+[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stDecoration"] { display: none !important; }
+footer { display: none !important; }
+
+
+/* ── Sidebar ───────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background-color: var(--bg-surface) !important;
+    border-right: 1px solid var(--bg-border) !important;
+}
+[data-testid="stSidebar"] * {
+    font-family: 'DM Sans', sans-serif !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: var(--text-primary) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em;
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label {
+    color: var(--text-muted) !important;
+    font-size: 0.82rem !important;
+}
+
+/* ── Sidebar: slider label rows ────────────────────────────────────────── */
+[data-testid="stSidebar"] .sidebar-param-label {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 10px 0 2px 0;
+}
+
+/* ── Inputs & Selects ──────────────────────────────────────────────────── */
+[data-testid="stNumberInput"] input,
+[data-testid="stTextInput"] input,
+[data-baseweb="select"] {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--bg-border) !important;
+    border-radius: 6px !important;
+    color: var(--text-primary) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.85rem !important;
+}
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stTextInput"] input:focus {
+    border-color: var(--accent-green) !important;
+    box-shadow: 0 0 0 2px rgba(0,232,122,0.15) !important;
+    outline: none !important;
+}
+
+/* ── Sliders ────────────────────────────────────────────────────────────── */
+[data-testid="stSlider"] [role="slider"] {
+    background-color: var(--accent-green) !important;
+    border-color: var(--accent-green) !important;
+}
+[data-testid="stSlider"] [data-testid="stSliderTrackActive"] {
+    background-color: var(--accent-green) !important;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #00e87a 0%, #00c563 100%) !important;
+    color: #080c12 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    letter-spacing: 0.04em !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 1.2rem !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 0 20px rgba(0,232,122,0.25) !important;
+}
+.stButton > button[kind="primary"]:hover {
+    box-shadow: 0 0 30px rgba(0,232,122,0.45) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button[kind="primary"]:disabled {
+    background: var(--bg-border) !important;
+    color: var(--text-muted) !important;
+    box-shadow: none !important;
+}
+
+/* ── Metric cards ───────────────────────────────────────────────────────── */
+[data-testid="metric-container"] {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--bg-border) !important;
+    border-radius: 10px !important;
+    padding: 16px 20px !important;
+    position: relative;
+    overflow: hidden;
+}
+[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--accent-green);
+    border-radius: 10px 0 0 10px;
+}
+[data-testid="stMetricLabel"] {
+    color: var(--text-muted) !important;
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+[data-testid="stMetricValue"] {
+    color: var(--text-primary) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+}
+[data-testid="stMetricDelta"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.78rem !important;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+[data-baseweb="tab-list"] {
+    background-color: var(--bg-surface) !important;
+    border-radius: 10px !important;
+    padding: 4px !important;
+    gap: 2px !important;
+    border: 1px solid var(--bg-border) !important;
+}
+[data-baseweb="tab"] {
+    background-color: transparent !important;
+    color: var(--text-muted) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.84rem !important;
+    font-weight: 500 !important;
+    border-radius: 7px !important;
+    padding: 6px 14px !important;
+    border: none !important;
+    transition: all 0.15s ease !important;
+}
+[aria-selected="true"][data-baseweb="tab"] {
+    background-color: var(--bg-elevated) !important;
+    color: var(--accent-green) !important;
+    font-weight: 600 !important;
+}
+[data-baseweb="tab-highlight"] { display: none !important; }
+[data-baseweb="tab-border"] { display: none !important; }
+
+/* ── DataFrames / Tables ────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--bg-border) !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+}
+[data-testid="stDataFrame"] * {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.8rem !important;
+}
+
+/* ── Info / Warning / Error boxes ──────────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    border-left-width: 3px !important;
+    font-size: 0.84rem !important;
+}
+
+/* ── Radio (mode switcher) ──────────────────────────────────────────────── */
+[data-testid="stRadio"] label {
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────── */
+hr {
+    border-color: var(--bg-border) !important;
+    margin: 12px 0 !important;
+}
+
+/* ── Subheaders / section headings in main content ─────────────────────── */
+.stMarkdown h3, h3 {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    letter-spacing: 0.02em !important;
+    margin: 20px 0 10px 0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Hero header ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div style="
+    padding: 28px 32px 20px 32px;
+    background: linear-gradient(135deg, #0d1420 0%, #080c12 60%, #0a1a0e 100%);
+    border: 1px solid #1e2d42;
+    border-radius: 14px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+">
+  <div style="
+      position: absolute; top: -40px; right: -40px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(0,232,122,0.06) 0%, transparent 70%);
+      pointer-events: none;
+  "></div>
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px;">
+    <span style="
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: #00e87a;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        background: rgba(0,232,122,0.08);
+        border: 1px solid rgba(0,232,122,0.2);
+        padding: 3px 8px;
+        border-radius: 4px;
+    ">VICI</span>
+    <h1 style="
+        margin: 0;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 1.65rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        letter-spacing: -0.01em;
+    ">US Stock Backtesting System</h1>
+  </div>
+  <p style="
+      margin: 0;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      color: #64748b;
+      letter-spacing: 0.02em;
+  "></p>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Sidebar: mode switcher + context-sensitive controls ──────────────────────
+# ── Session state defaults ────────────────────────────────────────────────────
+_SS_DEFAULTS = {
+    "fast_window": 20,      "_fast_s": 20,      "_fast_n": 20,
+    "slow_window": 50,      "_slow_s": 50,      "_slow_n": 50,
+    "commission_pct": 0.00, "_comm_s": 0.00,    "_comm_n": 0.00,
+    "slippage_pct": 0.00,   "_slip_s": 0.00,    "_slip_n": 0.00,
+    "spread_bps_val": 0.0,  "_spread_s": 0.0,   "_spread_n": 0.0,
+    "factor_lookback": 63,  "_flookback_s": 63, "_flookback_n": 63,
+    "factor_commission": 0.10, "_fcomm_s": 0.10, "_fcomm_n": 0.10,
+    "factor_spread": 5.0,   "_fspread_s": 5.0,  "_fspread_n": 5.0,
+    "factor_rebal_n_weeks": 4, "_frebal_n": 4, "_frebal_preset": "Monthly (4w)",
+}
+for _k, _v in _SS_DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+# Sync callbacks (slider → state, number_input → state)
+def _sync_fast_s():
+    v = st.session_state["_fast_s"];        st.session_state["fast_window"] = v;       st.session_state["_fast_n"] = v
+def _sync_fast_n():
+    v = st.session_state["_fast_n"];        st.session_state["fast_window"] = v;       st.session_state["_fast_s"] = v
+def _sync_slow_s():
+    v = st.session_state["_slow_s"];        st.session_state["slow_window"] = v;       st.session_state["_slow_n"] = v
+def _sync_slow_n():
+    v = st.session_state["_slow_n"];        st.session_state["slow_window"] = v;       st.session_state["_slow_s"] = v
+def _sync_comm_s():
+    v = st.session_state["_comm_s"];        st.session_state["commission_pct"] = v;    st.session_state["_comm_n"] = v
+def _sync_comm_n():
+    v = st.session_state["_comm_n"];        st.session_state["commission_pct"] = v;    st.session_state["_comm_s"] = v
+def _sync_slip_s():
+    v = st.session_state["_slip_s"];        st.session_state["slippage_pct"] = v;      st.session_state["_slip_n"] = v
+def _sync_slip_n():
+    v = st.session_state["_slip_n"];        st.session_state["slippage_pct"] = v;      st.session_state["_slip_s"] = v
+def _sync_spread_s():
+    v = st.session_state["_spread_s"];      st.session_state["spread_bps_val"] = v;    st.session_state["_spread_n"] = v
+def _sync_spread_n():
+    v = st.session_state["_spread_n"];      st.session_state["spread_bps_val"] = v;    st.session_state["_spread_s"] = v
+def _sync_flookback_s():
+    v = st.session_state["_flookback_s"];   st.session_state["factor_lookback"] = v;   st.session_state["_flookback_n"] = v
+def _sync_flookback_n():
+    v = st.session_state["_flookback_n"];   st.session_state["factor_lookback"] = v;   st.session_state["_flookback_s"] = v
+def _sync_fcomm_s():
+    v = st.session_state["_fcomm_s"];       st.session_state["factor_commission"] = v; st.session_state["_fcomm_n"] = v
+def _sync_fcomm_n():
+    v = st.session_state["_fcomm_n"];       st.session_state["factor_commission"] = v; st.session_state["_fcomm_s"] = v
+def _sync_fspread_s():
+    v = st.session_state["_fspread_s"];     st.session_state["factor_spread"] = v;     st.session_state["_fspread_n"] = v
+def _sync_fspread_n():
+    v = st.session_state["_fspread_n"];     st.session_state["factor_spread"] = v;     st.session_state["_fspread_s"] = v
+
+_REBAL_PRESETS = {"Weekly (1w)": 1, "Monthly (4w)": 4, "Quarterly (13w)": 13}
+def _sync_frebal_preset():
+    preset = st.session_state["_frebal_preset"]
+    if preset in _REBAL_PRESETS:
+        n = _REBAL_PRESETS[preset]
+        st.session_state["factor_rebal_n_weeks"] = n
+        st.session_state["_frebal_n"] = n
+def _sync_frebal_n():
+    st.session_state["factor_rebal_n_weeks"] = st.session_state["_frebal_n"]
+    st.session_state["_frebal_preset"] = "Custom"
+
 with st.sidebar:
     mode = st.radio(
         "Mode",
@@ -150,8 +547,28 @@ with st.sidebar:
             end_date = st.date_input("End Date", value=datetime.date(2024, 1, 1))
 
         st.subheader("SMA Windows")
-        fast_window = st.slider("Fast SMA", min_value=5, max_value=100, value=20, step=1, help="Fast Simple Moving Average window (days). A shorter window reacts quickly to price changes.")
-        slow_window = st.slider("Slow SMA", min_value=10, max_value=300, value=50, step=1, help="Slow Simple Moving Average window (days). A longer window reflects the broader trend.")
+        st.markdown("**Fast SMA**", help="Fast Simple Moving Average window (days). A shorter window reacts quickly to price changes.")
+        _fs_col, _fi_col = st.columns([3, 1])
+        with _fs_col:
+            st.slider("Fast SMA slider", min_value=5, max_value=100, step=1,
+                      key="_fast_s",
+                      on_change=_sync_fast_s, label_visibility="collapsed")
+        with _fi_col:
+            st.number_input("Fast SMA input", min_value=5, max_value=100, step=1,
+                            key="_fast_n",
+                            on_change=_sync_fast_n, label_visibility="collapsed")
+        fast_window = st.session_state["fast_window"]
+        st.markdown("**Slow SMA**", help="Slow Simple Moving Average window (days). A longer window reflects the broader trend.")
+        _ss_col, _si_col = st.columns([3, 1])
+        with _ss_col:
+            st.slider("Slow SMA slider", min_value=10, max_value=300, step=1,
+                      key="_slow_s",
+                      on_change=_sync_slow_s, label_visibility="collapsed")
+        with _si_col:
+            st.number_input("Slow SMA input", min_value=10, max_value=300, step=1,
+                            key="_slow_n",
+                            on_change=_sync_slow_n, label_visibility="collapsed")
+        slow_window = st.session_state["slow_window"]
         sma_valid = fast_window < slow_window
         if not sma_valid:
             st.error("⚠️ Fast SMA must be less than Slow SMA.")
@@ -163,9 +580,39 @@ with st.sidebar:
 
         st.markdown("---")
         st.subheader("Transaction Costs")
-        commission_pct = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.00, step=0.01, help="Broker fee charged per trade, as a percentage of the trade value.")
-        slippage_pct   = st.slider("Slippage (%)",   min_value=0.00, max_value=2.00, value=0.00, step=0.01, help="Estimated price impact: the difference between the expected and actual fill price.")
-        spread_bps_val = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=0.0, step=0.5, help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
+        st.markdown("**Commission (%)**", help="Broker fee charged per trade, as a percentage of the trade value.")
+        _cc_col, _ci_col = st.columns([3, 1])
+        with _cc_col:
+            st.slider("Commission slider", min_value=0.00, max_value=2.00, step=0.01,
+                      key="_comm_s",
+                      on_change=_sync_comm_s, label_visibility="collapsed")
+        with _ci_col:
+            st.number_input("Commission input", min_value=0.00, max_value=2.00, step=0.01,
+                            format="%.2f", key="_comm_n",
+                            on_change=_sync_comm_n, label_visibility="collapsed")
+        commission_pct = st.session_state["commission_pct"]
+        st.markdown("**Slippage (%)**", help="Estimated price impact: the difference between the expected and actual fill price.")
+        _sc_col, _si2_col = st.columns([3, 1])
+        with _sc_col:
+            st.slider("Slippage slider", min_value=0.00, max_value=2.00, step=0.01,
+                      key="_slip_s",
+                      on_change=_sync_slip_s, label_visibility="collapsed")
+        with _si2_col:
+            st.number_input("Slippage input", min_value=0.00, max_value=2.00, step=0.01,
+                            format="%.2f", key="_slip_n",
+                            on_change=_sync_slip_n, label_visibility="collapsed")
+        slippage_pct = st.session_state["slippage_pct"]
+        st.markdown("**Bid-Ask Spread (bps)**", help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
+        _sp_col, _spi_col = st.columns([3, 1])
+        with _sp_col:
+            st.slider("Spread slider", min_value=0.0, max_value=50.0, step=0.5,
+                      key="_spread_s",
+                      on_change=_sync_spread_s, label_visibility="collapsed")
+        with _spi_col:
+            st.number_input("Spread input", min_value=0.0, max_value=50.0, step=0.5,
+                            format="%.1f", key="_spread_n",
+                            on_change=_sync_spread_n, label_visibility="collapsed")
+        spread_bps_val = st.session_state["spread_bps_val"]
         entry_price_type = st.selectbox("Entry Price", ["close", "open"], index=0, help="'close' fills at today's closing price; 'open' fills at the next bar's opening price.")
 
         run_btn = st.button(
@@ -178,10 +625,19 @@ with st.sidebar:
     else:
         st.header("⚙️ Factor Analysis Parameters")
 
-        factor_raw_tickers = st.text_input(
-            "Stock Universe (comma-separated)",
-            value="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM",
+        universe_choice = st.selectbox(
+            "Stock Universe",
+            options=["S&P 100", "S&P 500", "NASDAQ-100", "Custom"],
+            index=0,
         )
+        if universe_choice == "Custom":
+            factor_raw_tickers = st.text_input(
+                "Custom Tickers (comma-separated)",
+                value="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM",
+            )
+        else:
+            factor_raw_tickers = ",".join(UNIVERSES[universe_choice])
+            st.caption(f"{len(UNIVERSES[universe_choice])} tickers loaded")
 
         fc1, fc2 = st.columns(2)
         with fc1:
@@ -193,15 +649,61 @@ with st.sidebar:
         st.subheader("Long-Short Settings")
         factor_top_n    = st.number_input("Long Top N", min_value=1, max_value=20, value=3, help="Number of highest-momentum stocks to go long (buy) each rebalance period.")
         factor_bottom_n = st.number_input("Short Bottom N", min_value=1, max_value=20, value=3, help="Number of lowest-momentum stocks to go short (sell) each rebalance period.")
+        st.markdown("**Rebalance Frequency**", help="Rebalance the portfolio every N calendar weeks. Use a preset or set a custom interval.")
+        st.selectbox(
+            "Rebalance preset",
+            options=list(_REBAL_PRESETS.keys()) + ["Custom"],
+            key="_frebal_preset",
+            on_change=_sync_frebal_preset,
+            label_visibility="collapsed",
+        )
+        st.number_input(
+            "Rebalance every N weeks",
+            min_value=1, max_value=52, step=1,
+            key="_frebal_n",
+            on_change=_sync_frebal_n,
+            label_visibility="collapsed",
+        )
+        factor_rebal_n_weeks = st.session_state["factor_rebal_n_weeks"]
 
         st.markdown("---")
         st.subheader("Strategy")
-        factor_lookback = st.slider("Momentum Lookback (days)", min_value=20, max_value=252, value=63, step=1, help="Look-back window used to rank stocks by past return. Longer = slower-changing rankings.")
+        st.markdown("**Momentum Lookback (days)**", help="Look-back window used to rank stocks by past return. Longer = slower-changing rankings.")
+        _fl_col, _fli_col = st.columns([3, 1])
+        with _fl_col:
+            st.slider("Lookback slider", min_value=20, max_value=252, step=1,
+                      key="_flookback_s",
+                      on_change=_sync_flookback_s, label_visibility="collapsed")
+        with _fli_col:
+            st.number_input("Lookback input", min_value=20, max_value=252, step=1,
+                            key="_flookback_n",
+                            on_change=_sync_flookback_n, label_visibility="collapsed")
+        factor_lookback = st.session_state["factor_lookback"]
 
         st.markdown("---")
         st.subheader("Transaction Costs")
-        factor_commission = st.slider("Commission (%)", min_value=0.00, max_value=2.00, value=0.10, step=0.01, help="Broker fee charged per trade, as a percentage of the trade value.")
-        factor_spread     = st.slider("Bid-Ask Spread (bps)", min_value=0.0, max_value=50.0, value=5.0, step=0.5, help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
+        st.markdown("**Commission (%)**", help="Broker fee charged per trade, as a percentage of the trade value.")
+        _fc_col, _fci_col = st.columns([3, 1])
+        with _fc_col:
+            st.slider("Factor commission slider", min_value=0.00, max_value=2.00, step=0.01,
+                      key="_fcomm_s",
+                      on_change=_sync_fcomm_s, label_visibility="collapsed")
+        with _fci_col:
+            st.number_input("Factor commission input", min_value=0.00, max_value=2.00, step=0.01,
+                            format="%.2f", key="_fcomm_n",
+                            on_change=_sync_fcomm_n, label_visibility="collapsed")
+        factor_commission = st.session_state["factor_commission"]
+        st.markdown("**Bid-Ask Spread (bps)**", help="Bid-ask spread in basis points (1 bps = 0.01%). Buying costs more; selling nets less.")
+        _fsp_col, _fspi_col = st.columns([3, 1])
+        with _fsp_col:
+            st.slider("Factor spread slider", min_value=0.0, max_value=50.0, step=0.5,
+                      key="_fspread_s",
+                      on_change=_sync_fspread_s, label_visibility="collapsed")
+        with _fspi_col:
+            st.number_input("Factor spread input", min_value=0.0, max_value=50.0, step=0.5,
+                            format="%.1f", key="_fspread_n",
+                            on_change=_sync_fspread_n, label_visibility="collapsed")
+        factor_spread = st.session_state["factor_spread"]
 
         run_factor_btn = st.button("▶ Run Factor Analysis", type="primary", use_container_width=True)
         run_btn = False
@@ -210,6 +712,18 @@ with st.sidebar:
 # ============================================================
 # Main content: renders based on selected mode
 # ============================================================
+_subtitle = (
+    "Strategy: SMA Crossover &nbsp;·&nbsp; Benchmark: Buy &amp; Hold SPY &nbsp;·&nbsp; Data: yfinance"
+    if mode == "📈 Single Stock"
+    else "Strategy: Long-Short Momentum &nbsp;·&nbsp; Benchmark: SPY (CAPM) &nbsp;·&nbsp; Data: yfinance"
+)
+st.markdown(f"""<p style="
+    margin: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    color: #64748b;
+    letter-spacing: 0.02em;
+">{_subtitle}</p>""", unsafe_allow_html=True)
 
 # ── Single Stock ─────────────────────────────────────────────────────────────
 if mode == "📈 Single Stock":
@@ -262,11 +776,13 @@ if mode == "📈 Single Stock":
                 with tab_overview:
                     if len(ticker_results) == 1:
                         m = ticker_results[0]["metrics"]
+                        st.markdown('<p style="font-size:0.72rem;font-weight:500;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;margin:0 0 8px 0;">Return Metrics</p>', unsafe_allow_html=True)
                         r1c1, r1c2, r1c3, r1c4 = st.columns(4)
                         r1c1.metric("CAGR", f"{m['cagr']:.1%}", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
                         r1c2.metric("Sharpe Ratio", f"{m['sharpe']:.2f}", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
                         r1c3.metric("Sortino Ratio", f"{m['sortino']:.2f}", help="Like Sharpe but only penalizes downside volatility. Higher is better.")
                         r1c4.metric("Calmar Ratio", f"{m['calmar']:.2f}", help="CAGR divided by Max Drawdown. Measures return per unit of drawdown risk.")
+                        st.markdown('<p style="font-size:0.72rem;font-weight:500;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;margin:16px 0 8px 0;">Risk &amp; Trade Metrics</p>', unsafe_allow_html=True)
                         r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
                         r2c1.metric("Max Drawdown", f"{m['mdd']:.1%}", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
                         r2c2.metric("Ann. Volatility", f"{m['vol']:.1%}", help="Annualized standard deviation of daily returns — a measure of risk.")
@@ -551,6 +1067,7 @@ else:
                             initial_capital=10_000.0,
                             commission_rate=factor_commission / 100.0,
                             spread_bps=factor_spread,
+                            rebal_every_n_weeks=int(factor_rebal_n_weeks),
                         )
                     except ValueError as exc:
                         st.error(f"Long-short backtest failed: {exc}")

@@ -258,6 +258,36 @@ class TestRunLongShortBacktest:
         assert "long_tickers" in holdings.columns
         assert "short_tickers" in holdings.columns
 
+    def test_rebalances_occur_with_sufficient_data(self):
+        """With >2 months of data, monthly_holdings must have at least one row (rebalances > 0)."""
+        prices = self._rising_dict(n_tickers=4, n_days=120)
+        result = run_long_short_backtest(
+            prices, top_n=1, bottom_n=1, lookback=10, initial_capital=10_000.0,
+        )
+        assert len(result["monthly_holdings"]) > 0
+
+    def test_smaller_n_weeks_more_rebalances(self):
+        """Rebalancing every 1 week must produce more events than every 4 weeks."""
+        prices = self._rising_dict(n_tickers=4, n_days=120)
+        result_4w = run_long_short_backtest(
+            prices, top_n=1, bottom_n=1, lookback=10, rebal_every_n_weeks=4,
+        )
+        result_1w = run_long_short_backtest(
+            prices, top_n=1, bottom_n=1, lookback=10, rebal_every_n_weeks=1,
+        )
+        assert result_1w["monthly_holdings"].height > result_4w["monthly_holdings"].height
+
+    def test_larger_n_weeks_fewer_rebalances(self):
+        """Rebalancing every 13 weeks must produce fewer events than every 4 weeks."""
+        prices = self._rising_dict(n_tickers=4, n_days=300)
+        result_4w = run_long_short_backtest(
+            prices, top_n=1, bottom_n=1, lookback=10, rebal_every_n_weeks=4,
+        )
+        result_13w = run_long_short_backtest(
+            prices, top_n=1, bottom_n=1, lookback=10, rebal_every_n_weeks=13,
+        )
+        assert result_13w["monthly_holdings"].height < result_4w["monthly_holdings"].height
+
     def test_insufficient_tickers_raises(self, multi_ticker_prices_dict):
         """top_n + bottom_n > len(universe) must raise ValueError."""
         n_tickers = len(multi_ticker_prices_dict)

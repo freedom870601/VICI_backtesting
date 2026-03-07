@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import logging
 from typing import TypedDict
 
@@ -139,6 +140,15 @@ def run_capm_regression(
     )
 
 
+_EPOCH = __import__("datetime").date(2000, 1, 3)  # a Monday
+
+
+def _rebal_period_key(d: "datetime.date", rebal_every_n_weeks: int) -> int:
+    """Return a period index that increments every rebal_every_n_weeks weeks."""
+    week_idx = (d - _EPOCH).days // 7
+    return week_idx // rebal_every_n_weeks
+
+
 def run_long_short_backtest(
     prices_dict: dict[str, pl.DataFrame],
     top_n: int,
@@ -147,10 +157,11 @@ def run_long_short_backtest(
     initial_capital: float = 10_000.0,
     commission_rate: float = 0.0,
     spread_bps: float = 0.0,
+    rebal_every_n_weeks: int = 4,
 ) -> LongShortResult:
-    """Run a monthly-rebalanced long-short momentum backtest.
+    """Run a rebalanced long-short momentum backtest.
 
-    Each month-start, rank tickers by momentum score:
+    At the start of each N-week period, rank tickers by momentum score:
     - Go long top_n (equal-weight, 50% of equity)
     - Go short bottom_n (equal-weight, 50% of equity)
 
@@ -162,6 +173,7 @@ def run_long_short_backtest(
         initial_capital: Starting portfolio value.
         commission_rate: Fractional commission per trade.
         spread_bps: Bid-ask spread in basis points (half-spread per side).
+        rebal_every_n_weeks: Rebalance every N calendar weeks (default 4 ≈ monthly).
 
     Returns:
         LongShortResult with equity, dates, daily_returns, and monthly_holdings.
@@ -211,6 +223,8 @@ def run_long_short_backtest(
             d = row["date"]
             scores_dict[d] = {k: v for k, v in row.items() if k != "date"}
 
+    score_dates_sorted = sorted(scores_dict.keys())
+
     spread_factor = spread_bps / 20_000.0
 
     # State
@@ -223,11 +237,11 @@ def run_long_short_backtest(
     equity_values: list[float] = []
     holdings_records: list[dict] = []
 
-    prev_month: tuple[int, int] | None = None
+    prev_period: tuple | None = None
 
     for i in range(n_days):
         d = dates_list[i]
-        cur_month = (d.year, d.month)
+        cur_period = _rebal_period_key(d, rebal_every_n_weeks)
 
         # Current prices for all tickers
         row_prices: dict[str, float] = {
@@ -245,10 +259,14 @@ def run_long_short_backtest(
         current_equity = cash + long_mtm + short_pnl
         equity_values.append(current_equity)
 
-        # Month-start rebalance (only if we have scores for this date)
-        is_month_start = cur_month != prev_month
-        if is_month_start and d in scores_dict:
-            day_scores = scores_dict[d]
+        # Period-start rebalance (use most recent scores at or before d)
+        is_month_start = cur_period != prev_period
+        day_scores = None
+        if is_month_start and score_dates_sorted:
+            idx = bisect.bisect_right(score_dates_sorted, d) - 1
+            if idx >= 0:
+                day_scores = scores_dict[score_dates_sorted[idx]]
+        if day_scores is not None:
 
             # 1. Close all long positions
             for ticker, shares in list(long_positions.items()):
@@ -306,7 +324,7 @@ def run_long_short_backtest(
                 "short_tickers": ", ".join(short_tickers),
             })
 
-        prev_month = cur_month
+        prev_period = cur_period
 
     # Close remaining positions at last price
     if long_positions or short_positions:
