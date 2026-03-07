@@ -51,6 +51,9 @@ Then open [http://localhost:8501](http://localhost:8501) in your browser.
 - Fast/slow windows configurable via sidebar sliders.
 - All-in / all-out position model: 100% of capital deployed on entry, full liquidation on exit.
 - Buy/sell markers shown on equity curve for single-ticker runs.
+- **Metrics (two rows)**: CAGR, Sharpe, Sortino, Calmar (row 1); Max Drawdown, Annualized Volatility, Profit Factor, Win Rate, # Trades (row 2).
+- **Strategy vs Benchmark table**: side-by-side comparison of key metrics against SPY Buy & Hold.
+- **Underwater (Drawdown) Chart**: running drawdown % for strategy and SPY overlaid.
 
 ### Factor Analysis — Long-Short Momentum
 - Ranks a user-defined stock universe by momentum score (`close[d] / close[d - lookback] - 1`).
@@ -100,6 +103,9 @@ All sidebar inputs and metric cards include a `(?)` help icon with plain-English
 | CAGR | `(end/start)^(1/years) - 1` |
 | Annualized Volatility | `daily_returns.std() × √252` |
 | Sharpe Ratio | `(mean_return × 252 - rfr) / annualized_vol` (rfr = 2%) |
+| Sortino Ratio | `(mean_return × 252 - rfr) / downside_std` (downside only) |
+| Calmar Ratio | `CAGR / abs(Max Drawdown)` |
+| Profit Factor | `gross_profit / abs(gross_loss)` across all trades |
 | Max Drawdown | `max((rolling_max - equity) / rolling_max)` |
 | Win Rate | `n_trades_with_pnl > 0 / total_trades` |
 
@@ -155,11 +161,15 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 11 | `feat(metrics)` | Add monthly returns, rolling Sharpe/vol, holding period stats |
 | 12 | `feat(app)` | Reorganize single-stock results into tabs; add dark theme |
 | 13 | `feat(app)` | Add hover tooltips (`help=`) on all sidebar inputs and metric cards |
+| 14 | `feat(metrics)` | Add Sortino, Calmar, Profit Factor, drawdown_series; expand metric cards |
+| 14 | `feat(app)` | Strategy vs Benchmark table; Underwater Drawdown Chart |
+| 15 | `fix(metrics)` | Guard rolling_sharpe against near-zero std (null instead of ±∞); remove Rolling Metrics chart |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
 - **Sharpe zero-vol guard**: Changed `== 0.0` to `< 1e-10` to handle floating-point precision in polars `.std()`
 - **uv Python pin**: Ran `uv python pin 3.11` to resolve version conflict from conda environment
+- **rolling_sharpe expr context**: `pl.when/then/otherwise` returns an `Expr`, not a `Series` — must be evaluated inside a `DataFrame.select()` call
 
 ### Test Coverage Results
 ```
@@ -167,14 +177,14 @@ Name                   Stmts   Miss  Cover
 ------------------------------------------
 backtest/__init__.py       0      0   100%
 backtest/data.py          19      1    95%
-backtest/engine.py        57      6    89%
-backtest/factor.py       149      4    97%
-backtest/metrics.py       34      0   100%
+backtest/engine.py        57      0   100%
+backtest/factor.py       149      0   100%
+backtest/metrics.py       91      0   100%
 backtest/strategy.py      13      0   100%
 ------------------------------------------
-TOTAL                    272     11    96%
+TOTAL                    329      1    99%
 ```
-101 tests passing.
+114 tests passing.
 
 ---
 
