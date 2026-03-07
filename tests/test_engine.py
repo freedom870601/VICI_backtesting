@@ -218,19 +218,18 @@ class TestRunBacktestSpreadAndEntryType:
             assert result_with_spread["equity"][-1] <= result_no_spread["equity"][-1]
 
     def test_entry_type_open_uses_open_price(self):
-        """When entry_price_type='open', BUY fill must use the 'open' column price."""
-        open_price = 95.0
-        close_price = 100.0
+        """When entry_price_type='open', BUY fill must use next bar's open price."""
+        # signal fires at i=0 (close=100), fills at opens[1]=110 (next bar open)
         signals = pl.DataFrame({
-            "open": [open_price, 110.0],
-            "close": [close_price, 110.0],
-            "signal": pl.Series([1, -1], dtype=pl.Int8),
+            "open": [95.0, 110.0, 105.0],
+            "close": [100.0, 110.0, 120.0],
+            "signal": pl.Series([1, 0, -1], dtype=pl.Int8),
         })
         result = run_backtest(signals, initial_capital=10_000.0, entry_price_type="open")
         trades = result["trades"]
         assert not trades.is_empty()
-        # fill should be open_price, not close_price
-        assert abs(trades["entry_price"][0] - open_price) < 1e-6
+        # fill should be opens[1]=110.0, not closes[0]=100.0 or opens[0]=95.0
+        assert abs(trades["entry_price"][0] - 110.0) < 1e-6
 
     def test_entry_type_close_unchanged(self):
         """entry_price_type='close' (default) must use close price for BUY fill."""

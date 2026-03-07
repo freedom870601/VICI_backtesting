@@ -71,7 +71,9 @@ Three independent cost parameters, all reflected in equity curve and trade PnL:
 
 Slippage and spread model different costs (market impact vs. bid-ask crossing) and are applied multiplicatively. Defaults are 0.
 
-**Entry Price** selectbox: choose `close` (default) or `open` — determines the price used for BUY fills. Useful for next-bar execution simulation.
+**Entry Price** selectbox: choose `close` (default) or `open` — determines the price used for BUY fills.
+- `close`: fills at today's close (same bar as the signal); slight look-ahead bias.
+- `open`: fills at the **next bar's opening price** (signal generated at close[t], executed at open[t+1]); avoids look-ahead bias and better reflects realistic order execution.
 
 ### Hover Tooltips
 All sidebar inputs and metric cards include a `(?)` help icon with plain-English explanations of financial terms (CAGR, Sharpe Ratio, Beta, SMA, etc.), making the dashboard accessible to non-expert users.
@@ -164,6 +166,7 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 14 | `feat(metrics)` | Add Sortino, Calmar, Profit Factor, drawdown_series; expand metric cards |
 | 14 | `feat(app)` | Strategy vs Benchmark table; Underwater Drawdown Chart |
 | 15 | `fix(metrics)` | Guard rolling_sharpe against near-zero std (null instead of ±∞); remove Rolling Metrics chart |
+| 16 | `fix(engine)` | Fix `open` entry price: fill at next bar's open[t+1] instead of same-bar open[t], eliminating look-ahead bias |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points

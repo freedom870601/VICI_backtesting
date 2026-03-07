@@ -79,13 +79,18 @@ def run_backtest(
 
         if sig == 1 and shares == 0.0:
             # BUY: go all-in with slippage, spread, and commission
-            buy_price = opens[i] if use_open else price
+            # "open" mode fills at next bar's open (signal generated at close[i], execute at open[i+1])
+            if use_open and i + 1 < n:
+                buy_price = opens[i + 1]
+                entry_idx = i + 1
+            else:
+                buy_price = price
+                entry_idx = i
             fill_price = buy_price * (1.0 + slippage_rate) * (1.0 + spread_factor)
             commission = cash * commission_rate
             available_cash = cash - commission
             shares = available_cash / fill_price
             cash = 0.0
-            entry_idx = i
             entry_price = fill_price
 
         elif sig == -1 and shares > 0.0:
