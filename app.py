@@ -231,7 +231,15 @@ footer { display: none !important; }
     background-color: var(--bg-surface) !important;
     border-right: 1px solid var(--bg-border) !important;
 }
-[data-testid="stSidebar"] * {
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] button,
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4,
+[data-testid="stSidebar"] li {
     font-family: 'DM Sans', sans-serif !important;
 }
 [data-testid="stSidebar"] h1,
