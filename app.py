@@ -15,13 +15,15 @@ from backtest.factor import run_capm_regression, run_long_short_backtest
 from backtest.metrics import (
     calculate_annualized_volatility,
     calculate_cagr,
+    calculate_calmar_ratio,
     calculate_max_drawdown,
+    calculate_profit_factor,
     calculate_sharpe_ratio,
+    calculate_sortino_ratio,
     calculate_win_rate,
+    drawdown_series,
     holding_period_stats,
     monthly_returns,
-    rolling_sharpe,
-    rolling_volatility,
 )
 from backtest.strategy import generate_sma_signals
 
@@ -100,6 +102,7 @@ def run_ticker_pipeline(
     trades: pl.DataFrame = result["trades"]
     daily_returns = equity.pct_change().drop_nulls()
 
+    equity_list = equity.to_list()
     return {
         "ticker": ticker,
         "prices_df": prices_df,
@@ -109,8 +112,12 @@ def run_ticker_pipeline(
             "cagr": calculate_cagr(equity),
             "vol": calculate_annualized_volatility(daily_returns) if len(daily_returns) > 0 else 0.0,
             "sharpe": calculate_sharpe_ratio(daily_returns) if len(daily_returns) > 0 else 0.0,
+            "sortino": calculate_sortino_ratio(daily_returns) if len(daily_returns) > 0 else 0.0,
+            "calmar": calculate_calmar_ratio(equity_list) if len(equity_list) >= 2 else 0.0,
             "mdd": calculate_max_drawdown(equity),
             "win_rate": calculate_win_rate(trades),
+            "profit_factor": calculate_profit_factor(trades),
+            "n_trades": trades.height,
         },
     }
 
@@ -255,12 +262,57 @@ if mode == "📈 Single Stock":
                 with tab_overview:
                     if len(ticker_results) == 1:
                         m = ticker_results[0]["metrics"]
-                        c1, c2, c3, c4, c5 = st.columns(5)
-                        c1.metric("CAGR", f"{m['cagr']:.1%}", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
-                        c2.metric("Ann. Volatility", f"{m['vol']:.1%}", help="Annualized standard deviation of daily returns — a measure of risk.")
-                        c3.metric("Sharpe Ratio", f"{m['sharpe']:.2f}", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
-                        c4.metric("Max Drawdown", f"{m['mdd']:.1%}", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
-                        c5.metric("Win Rate", f"{m['win_rate']:.1%}", help="Proportion of completed trades that were profitable.")
+                        r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+                        r1c1.metric("CAGR", f"{m['cagr']:.1%}", help="Compound Annual Growth Rate: the smoothed annual return over the full period.")
+                        r1c2.metric("Sharpe Ratio", f"{m['sharpe']:.2f}", help="Risk-adjusted return: (portfolio return − risk-free rate) ÷ volatility. Higher is better.")
+                        r1c3.metric("Sortino Ratio", f"{m['sortino']:.2f}", help="Like Sharpe but only penalizes downside volatility. Higher is better.")
+                        r1c4.metric("Calmar Ratio", f"{m['calmar']:.2f}", help="CAGR divided by Max Drawdown. Measures return per unit of drawdown risk.")
+                        r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+                        r2c1.metric("Max Drawdown", f"{m['mdd']:.1%}", help="Largest peak-to-trough decline in portfolio value. Measures worst-case loss.")
+                        r2c2.metric("Ann. Volatility", f"{m['vol']:.1%}", help="Annualized standard deviation of daily returns — a measure of risk.")
+                        r2c3.metric("Profit Factor", f"{m['profit_factor']:.2f}", help="Gross profit divided by gross loss. Values > 1 indicate a net-profitable strategy.")
+                        r2c4.metric("Win Rate", f"{m['win_rate']:.1%}", help="Proportion of completed trades that were profitable.")
+                        r2c5.metric("# Trades", str(m['n_trades']), help="Total number of completed round-trip trades.")
+
+                        # ── Strategy vs Benchmark comparison table ───────────────
+                        if spy_df is not None and len(spy_df) >= 2:
+                            st.subheader("Strategy vs Benchmark")
+                            spy_close = spy_df["close"].to_list()
+                            spy_returns = pl.Series([spy_close[i] / spy_close[i - 1] - 1 for i in range(1, len(spy_close))])
+                            spy_equity_list = [float(initial_capital) * c / spy_close[0] for c in spy_close]
+                            spy_equity_s = pl.Series("equity", spy_equity_list)
+                            strat_metrics = {
+                                "CAGR": f"{m['cagr']:.1%}",
+                                "Sharpe": f"{m['sharpe']:.2f}",
+                                "Sortino": f"{m['sortino']:.2f}",
+                                "Calmar": f"{m['calmar']:.2f}",
+                                "Max Drawdown": f"{m['mdd']:.1%}",
+                                "Ann. Volatility": f"{m['vol']:.1%}",
+                                "Profit Factor": f"{m['profit_factor']:.2f}",
+                                "Win Rate": f"{m['win_rate']:.1%}",
+                            }
+                            spy_cagr = calculate_cagr(spy_equity_s)
+                            spy_vol = calculate_annualized_volatility(spy_returns) if len(spy_returns) > 0 else 0.0
+                            spy_sharpe = calculate_sharpe_ratio(spy_returns) if len(spy_returns) > 0 else 0.0
+                            spy_sortino = calculate_sortino_ratio(spy_returns) if len(spy_returns) > 0 else 0.0
+                            spy_calmar = calculate_calmar_ratio(spy_equity_list)
+                            spy_mdd = calculate_max_drawdown(spy_equity_s)
+                            spy_metrics = {
+                                "CAGR": f"{spy_cagr:.1%}",
+                                "Sharpe": f"{spy_sharpe:.2f}",
+                                "Sortino": f"{spy_sortino:.2f}",
+                                "Calmar": f"{spy_calmar:.2f}",
+                                "Max Drawdown": f"{spy_mdd:.1%}",
+                                "Ann. Volatility": f"{spy_vol:.1%}",
+                                "Profit Factor": "—",
+                                "Win Rate": "—",
+                            }
+                            comparison_df = pl.DataFrame({
+                                "Metric": list(strat_metrics.keys()),
+                                "Strategy": list(strat_metrics.values()),
+                                "SPY": list(spy_metrics.values()),
+                            })
+                            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
                     else:
                         rows = []
                         for r in ticker_results:
@@ -326,6 +378,33 @@ if mode == "📈 Single Stock":
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     )
                     st.plotly_chart(fig, use_container_width=True)
+
+                    # ── Underwater (Drawdown) Chart ───────────────────────────
+                    if len(ticker_results) == 1:
+                        r0 = ticker_results[0]
+                        eq0 = r0["result"]["equity"].to_list()
+                        dates0 = r0["prices_df"]["date"].to_list()
+                        dd0 = drawdown_series(eq0)
+                        fig_uw = go.Figure()
+                        fig_uw.add_trace(go.Scatter(
+                            x=dates0, y=dd0, fill="tozeroy",
+                            name="Strategy", line=dict(color="red"),
+                        ))
+                        if spy_df is not None:
+                            spy_close_uw = spy_df["close"].to_list()
+                            spy_eq_uw = [eq0[0] * c / spy_close_uw[0] for c in spy_close_uw]
+                            spy_dd_uw = drawdown_series(spy_eq_uw)
+                            fig_uw.add_trace(go.Scatter(
+                                x=spy_df["date"].to_list(), y=spy_dd_uw, fill="tozeroy",
+                                name="SPY", line=dict(color="orange", dash="dash"),
+                            ))
+                        fig_uw.update_layout(
+                            title="Underwater (Drawdown) Chart",
+                            yaxis_title="Drawdown %", template="plotly_dark", height=300,
+                            margin=dict(l=0, r=0, t=40, b=0),
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        )
+                        st.plotly_chart(fig_uw, use_container_width=True)
 
                     if len(ticker_results) == 1:
                         st.subheader("Price & SMA Chart")
@@ -415,37 +494,6 @@ if mode == "📈 Single Stock":
 
                         st.divider()
 
-                        st.subheader("Rolling 63-Day Metrics")
-                        try:
-                            daily_ret = equity_s.pct_change().drop_nulls()
-                            r_sharpe = rolling_sharpe(daily_ret, window=63)
-                            r_vol = rolling_volatility(daily_ret, window=63)
-                            chart_dates = prices_dates.slice(1).to_list()
-
-                            fig_roll = go.Figure()
-                            fig_roll.add_trace(go.Scatter(
-                                x=chart_dates, y=r_sharpe.to_list(),
-                                name="Rolling Sharpe", line=dict(color="#2196F3"),
-                            ))
-                            fig_roll.add_trace(go.Scatter(
-                                x=chart_dates, y=r_vol.to_list(),
-                                name="Rolling Volatility", line=dict(color="#FF5722"),
-                                yaxis="y2",
-                            ))
-                            fig_roll.update_layout(
-                                template="plotly_dark",
-                                height=350,
-                                yaxis=dict(title="Sharpe Ratio"),
-                                yaxis2=dict(title="Volatility", overlaying="y", side="right"),
-                                legend=dict(orientation="h", y=1.1),
-                                margin=dict(l=0, r=0, t=30, b=0),
-                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                            )
-                            st.plotly_chart(fig_roll, use_container_width=True)
-                        except Exception as exc:
-                            st.info(f"Rolling metrics unavailable: {exc}")
-
-                        st.divider()
 
                         st.subheader("Holding Period Statistics (days)")
                         if trades_df.is_empty():

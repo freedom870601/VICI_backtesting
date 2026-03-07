@@ -12,6 +12,10 @@ __all__ = [
     "calculate_sharpe_ratio",
     "calculate_max_drawdown",
     "calculate_win_rate",
+    "calculate_sortino_ratio",
+    "calculate_calmar_ratio",
+    "calculate_profit_factor",
+    "drawdown_series",
     "monthly_returns",
     "rolling_sharpe",
     "rolling_volatility",
@@ -166,9 +170,15 @@ def rolling_sharpe(
     daily_rf = risk_free_rate / periods_per_year
     excess = returns - daily_rf
     roll_mean = excess.rolling_mean(window_size=window)
-    roll_std = returns.rolling_std(window_size=window)
+    roll_std = excess.rolling_std(window_size=window)
     # annualize
-    sharpe = (roll_mean / roll_std) * math.sqrt(periods_per_year)
+    df = pl.DataFrame({"roll_mean": roll_mean, "roll_std": roll_std})
+    sharpe = df.select(
+        pl.when(pl.col("roll_std").abs() > 1e-10)
+        .then((pl.col("roll_mean") / pl.col("roll_std")) * math.sqrt(periods_per_year))
+        .otherwise(None)
+        .alias("sharpe")
+    )["sharpe"]
     return sharpe
 
 
@@ -209,6 +219,96 @@ def holding_period_stats(trades: pl.DataFrame) -> dict:
         "min": int(durations.min()),
         "max": int(durations.max()),
     }
+
+
+def calculate_sortino_ratio(
+    returns: pl.Series,
+    risk_free_rate: float = 0.02,
+    periods_per_year: int = 252,
+) -> float:
+    """Calculate annualized Sortino Ratio using downside deviation.
+
+    Args:
+        returns: Daily return values.
+        risk_free_rate: Annual risk-free rate (default 2%).
+        periods_per_year: Trading days per year (default 252).
+
+    Returns:
+        Annualized Sortino Ratio. Returns 0.0 if downside deviation is zero.
+
+    Raises:
+        ValueError: If returns is empty.
+    """
+    _validate_non_empty(returns, "returns")
+    negative_returns = returns.filter(returns < 0)
+    if len(negative_returns) == 0:
+        downside_std = 0.0
+    else:
+        downside_std = float(negative_returns.std()) * math.sqrt(periods_per_year)
+    if downside_std < 1e-10:
+        return 0.0
+    annualized_return = float(returns.mean()) * periods_per_year
+    return (annualized_return - risk_free_rate) / downside_std
+
+
+def calculate_calmar_ratio(
+    equity: list[float],
+    periods_per_year: int = 252,
+) -> float:
+    """Calculate Calmar Ratio: CAGR / abs(Max Drawdown).
+
+    Args:
+        equity: Daily equity values as a list.
+        periods_per_year: Trading days per year (default 252).
+
+    Returns:
+        Calmar Ratio. Returns 0.0 if max drawdown is zero.
+    """
+    equity_s = pl.Series("equity", equity)
+    cagr = calculate_cagr(equity_s, periods_per_year)
+    mdd = calculate_max_drawdown(equity_s)
+    if mdd < 1e-10:
+        return 0.0
+    return cagr / mdd
+
+
+def calculate_profit_factor(trades: pl.DataFrame) -> float:
+    """Calculate Profit Factor: gross profit / abs(gross loss).
+
+    Args:
+        trades: DataFrame with a 'pnl' column.
+
+    Returns:
+        Profit Factor. Returns 0.0 if there are no losing trades.
+    """
+    if trades.is_empty():
+        return 0.0
+    gross_profit = float(trades.filter(pl.col("pnl") > 0)["pnl"].sum())
+    gross_loss = float(trades.filter(pl.col("pnl") < 0)["pnl"].sum())
+    if abs(gross_loss) < 1e-10:
+        return 0.0
+    return gross_profit / abs(gross_loss)
+
+
+def drawdown_series(equity: list[float]) -> list[float]:
+    """Compute running drawdown percentage at each point.
+
+    Args:
+        equity: Daily equity values as a list.
+
+    Returns:
+        List of drawdown percentages (0 to -100).
+    """
+    if not equity:
+        return []
+    result: list[float] = []
+    peak = equity[0]
+    for v in equity:
+        if v > peak:
+            peak = v
+        dd = (v / peak - 1.0) * 100.0 if peak > 0 else 0.0
+        result.append(dd)
+    return result
 
 
 def calculate_win_rate(trades: pl.DataFrame) -> float:

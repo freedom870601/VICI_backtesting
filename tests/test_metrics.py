@@ -9,9 +9,13 @@ import pytest
 from backtest.metrics import (
     calculate_annualized_volatility,
     calculate_cagr,
+    calculate_calmar_ratio,
     calculate_max_drawdown,
+    calculate_profit_factor,
     calculate_sharpe_ratio,
+    calculate_sortino_ratio,
     calculate_win_rate,
+    drawdown_series,
     holding_period_stats,
     monthly_returns,
     rolling_sharpe,
@@ -175,6 +179,90 @@ class TestWinRate:
         assert math.isclose(result, 1 / 3, rel_tol=1e-6)
 
 
+class TestSortinoRatio:
+    def test_sortino_positive_with_negative_returns(self):
+        """Mixed returns with negatives → finite positive Sortino."""
+        returns = pl.Series("returns", [0.02, -0.01, 0.03, -0.005, 0.01] * 50)
+        result = calculate_sortino_ratio(returns, risk_free_rate=0.02)
+        assert isinstance(result, float)
+        neg = returns.filter(returns < 0)
+        downside_std = float(neg.std()) * math.sqrt(252)
+        expected = (float(returns.mean()) * 252 - 0.02) / downside_std
+        assert math.isclose(result, expected, rel_tol=1e-6)
+
+    def test_sortino_zero_downside_returns_zero(self):
+        """All positive returns → downside std = 0 → returns 0.0."""
+        returns = pl.Series("returns", [0.01] * 100)
+        result = calculate_sortino_ratio(returns)
+        assert result == 0.0
+
+    def test_sortino_empty_raises(self):
+        """Empty returns raise ValueError."""
+        with pytest.raises(ValueError, match="empty"):
+            calculate_sortino_ratio(pl.Series("returns", [], dtype=pl.Float64))
+
+
+class TestCalmarRatio:
+    def test_calmar_known_values(self):
+        """Equity: 100 → 200 → 100. CAGR > 0, MDD = 50% → Calmar = CAGR/0.5."""
+        # 505 points: rises to 200 at midpoint then falls to 100
+        mid = 253
+        rising = [100.0 + (100.0 * i / mid) for i in range(mid)]
+        falling = [200.0 - (100.0 * i / (505 - mid)) for i in range(1, 505 - mid + 1)]
+        equity = rising + falling
+        result = calculate_calmar_ratio(equity)
+        equity_s = pl.Series("equity", equity)
+        cagr = calculate_cagr(equity_s)
+        mdd = calculate_max_drawdown(equity_s)
+        assert math.isclose(result, cagr / mdd, rel_tol=1e-6)
+
+    def test_calmar_zero_drawdown(self):
+        """Monotone rising equity → MDD = 0 → Calmar = 0.0."""
+        equity = [100.0 + i for i in range(253)]
+        result = calculate_calmar_ratio(equity)
+        assert result == 0.0
+
+
+class TestProfitFactor:
+    def test_profit_factor_known(self):
+        """Gross profit = 300, gross loss = 80 → PF = 3.75."""
+        trades = pl.DataFrame({"pnl": [100.0, 200.0, -50.0, -30.0]})
+        result = calculate_profit_factor(trades)
+        assert math.isclose(result, 300.0 / 80.0, rel_tol=1e-6)
+
+    def test_profit_factor_no_losers(self):
+        """No losing trades → returns 0.0."""
+        trades = pl.DataFrame({"pnl": [100.0, 200.0, 50.0]})
+        result = calculate_profit_factor(trades)
+        assert result == 0.0
+
+    def test_profit_factor_empty(self):
+        """Empty trades → returns 0.0."""
+        trades = pl.DataFrame({"pnl": pl.Series([], dtype=pl.Float64)})
+        result = calculate_profit_factor(trades)
+        assert result == 0.0
+
+
+class TestDrawdownSeries:
+    def test_monotone_rising_all_zeros(self):
+        """Monotone rising equity → all drawdowns are 0."""
+        equity = [100.0, 110.0, 120.0, 130.0]
+        result = drawdown_series(equity)
+        assert all(d == 0.0 for d in result)
+
+    def test_drawdown_known_values(self):
+        """100 → 200 → 100: peak after idx 1 = 200 → dd at idx 2 = -50%."""
+        equity = [100.0, 200.0, 100.0]
+        result = drawdown_series(equity)
+        assert math.isclose(result[0], 0.0, abs_tol=1e-9)
+        assert math.isclose(result[1], 0.0, abs_tol=1e-9)
+        assert math.isclose(result[2], -50.0, rel_tol=1e-6)
+
+    def test_drawdown_empty(self):
+        """Empty equity → empty list."""
+        assert drawdown_series([]) == []
+
+
 class TestMonthlyReturns:
     def _make_equity_and_dates(self) -> tuple[pl.Series, pl.Series]:
         """Two full months of constant 1% daily growth (Jan + Feb 2020)."""
@@ -229,6 +317,28 @@ class TestRollingSharpe:
         window = 63
         result = rolling_sharpe(known_returns, window=window)
         assert result[window:].null_count() == 0
+
+    def test_rolling_sharpe_correct_value(self):
+        """rolling_sharpe should use std(excess_returns), not std(returns)."""
+        window = 5
+        risk_free_rate = 0.02
+        periods_per_year = 252
+        daily_rf = risk_free_rate / periods_per_year
+        returns = pl.Series("returns", [0.01, 0.02, 0.01, 0.02, 0.01, 0.02])
+        result = rolling_sharpe(returns, window=window, risk_free_rate=risk_free_rate)
+
+        excess = returns - daily_rf
+        expected_mean = float(excess[-window:].mean())
+        expected_std = float(excess[-window:].std())
+        expected = (expected_mean / expected_std) * math.sqrt(periods_per_year)
+
+        assert math.isclose(float(result[-1]), expected, rel_tol=1e-6)
+
+    def test_rolling_sharpe_flat_returns_gives_null(self):
+        """When all returns in window are identical, std≈0 → result should be null."""
+        returns = pl.Series("returns", [0.001] * 10)
+        result = rolling_sharpe(returns, window=5)
+        assert result[-1] is None
 
 
 class TestRollingVolatility:
