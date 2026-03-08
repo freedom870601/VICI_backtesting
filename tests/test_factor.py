@@ -216,15 +216,17 @@ class TestRunLongShortBacktest:
         assert result["equity"][-1] > result["equity"][0]
 
     def test_shorts_gain_when_prices_fall(self):
-        """Short leg gains when prices fall."""
+        """Short leg gains when prices fall faster than the long leg loses.
+
+        _falling_dict slopes: A falls 20, B falls 40, C falls 60, D falls 80.
+        Strategy: long A (least negative momentum), short D (most negative).
+        Short gain on D (+80) dwarfs long loss on A (-20) → net positive.
+        """
         prices = self._falling_dict()
-        # Short the weakest (fastest falling) ticker → PnL > 0 from short side
         result = run_long_short_backtest(
             prices, top_n=1, bottom_n=1, lookback=10, initial_capital=10_000.0,
         )
-        # With asymmetric slopes the strategy should be positive overall
-        # (strongest faller is shorted; weakest faller is longed)
-        assert result["equity"][-1] != result["equity"][0]  # some change occurred
+        assert result["equity"][-1] > result["equity"][0]
 
     def test_commission_reduces_equity(self, multi_ticker_prices_dict):
         """With commission, final equity must be <= no-commission run."""

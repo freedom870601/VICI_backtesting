@@ -33,12 +33,11 @@ class TestCAGR:
         assert math.isclose(result, 1.0, rel_tol=1e-6)
 
     def test_two_year_10pct_cagr(self):
-        """Equity grows from 100 to 121 over 2 years → CAGR = 10%."""
-        # 505 daily observations = 505/252 ≈ 2.004 years
-        # Use exactly 505 points: start=100, end=121
+        """Equity grows from 100 to 121 over exactly 2 years (504 periods) → CAGR = 10%."""
+        # 505 points = 504 periods = 2 * 252 → CAGR = (121/100)^(1/2) - 1 = 0.10 exactly
         equity = pl.Series("equity", [100.0] + [None] * 503 + [121.0]).fill_null(strategy="forward")
         result = calculate_cagr(equity, periods_per_year=252)
-        assert math.isclose(result, 0.10, rel_tol=0.01)
+        assert math.isclose(result, 0.10, rel_tol=1e-6)
 
     def test_single_element_raises_value_error(self):
         """Single element equity series should raise ValueError."""
@@ -108,12 +107,11 @@ class TestSharpeRatio:
             calculate_sharpe_ratio(returns)
 
     def test_positive_sharpe_for_good_returns(self):
-        """High daily returns → positive Sharpe."""
-        returns = pl.Series("returns", [0.01] * 252)
+        """Returns with positive mean and non-zero variance → Sharpe > 0."""
+        # alternating 2%/1% daily: mean=1.5%/day >> rfr/252, has variance
+        returns = pl.Series("returns", [0.02, 0.01] * 126)
         result = calculate_sharpe_ratio(returns, risk_free_rate=0.02)
-        # mean*252=2.52, rfr=0.02, vol=0 → returns 0 (zero vol branch)
-        # With tiny noise this would be positive; use a known positive case
-        assert result == 0.0  # zero vol branch
+        assert result > 0.0
 
 
 class TestMaxDrawdown:
@@ -204,17 +202,19 @@ class TestSortinoRatio:
 
 class TestCalmarRatio:
     def test_calmar_known_values(self):
-        """Equity: 100 → 200 → 100. CAGR > 0, MDD = 50% → Calmar = CAGR/0.5."""
-        # 505 points: rises to 200 at midpoint then falls to 100
-        mid = 253
-        rising = [100.0 + (100.0 * i / mid) for i in range(mid)]
-        falling = [200.0 - (100.0 * i / (505 - mid)) for i in range(1, 505 - mid + 1)]
-        equity = rising + falling
-        result = calculate_calmar_ratio(equity)
-        equity_s = pl.Series("equity", equity)
-        cagr = calculate_cagr(equity_s)
-        mdd = calculate_max_drawdown(equity_s)
-        assert math.isclose(result, cagr / mdd, rel_tol=1e-6)
+        """Equity: 100 → 200 → 150 over exactly 1 trading year (252 periods).
+
+        CAGR = (150/100)^1 - 1 = 50%
+        MDD  = (200 - 150) / 200 = 25%
+        Calmar = 0.50 / 0.25 = 2.0
+        """
+        n = 253   # 252 periods = 1 trading year
+        mid = 127  # peak at index 126
+        rising  = [100.0 + 100.0 * i / (mid - 1) for i in range(mid)]   # 100 → 200
+        falling = [200.0 -  50.0 * i / (mid - 1) for i in range(mid)]   # 200 → 150
+        equity = rising + falling[1:]  # 253 points total
+        result = calculate_calmar_ratio(equity, periods_per_year=252)
+        assert math.isclose(result, 2.0, rel_tol=1e-4)
 
     def test_calmar_zero_drawdown(self):
         """Monotone rising equity → MDD = 0 → Calmar = 0.0."""

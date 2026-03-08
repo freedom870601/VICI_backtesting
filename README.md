@@ -172,12 +172,19 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 16 | `fix(engine)` | Fix `open` entry price: fill at next bar's open[t+1] instead of same-bar open[t], eliminating look-ahead bias |
 | 17 | `feat(factor)` | Add configurable rebalance frequency (every N weeks, 1–12 selectable) to long-short factor backtest |
 | 18 | `style(app)` | Scope sidebar font-family CSS to specific element types to avoid unintended style bleed |
+| 19 | `test` | Test audit: fix 5 unreliable/misleading tests across metrics, engine, and factor modules |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
 - **Sharpe zero-vol guard**: Changed `== 0.0` to `< 1e-10` to handle floating-point precision in polars `.std()`
 - **uv Python pin**: Ran `uv python pin 3.11` to resolve version conflict from conda environment
 - **rolling_sharpe expr context**: `pl.when/then/otherwise` returns an `Expr`, not a `Series` — must be evaluated inside a `DataFrame.select()` call
+- **Test audit (phase 19)**: Reviewed all 118 tests for correctness; fixed 5 issues:
+  - `test_positive_sharpe_for_good_returns` — was asserting `== 0.0` (zero-vol branch), contradicting its name; rewrote with alternating returns that have variance and assert `> 0`
+  - `test_two_year_10pct_cagr` — tightened tolerance from `rel_tol=0.01` to `1e-6`; 505 points = 504 periods = exactly 2 × 252 so the exact answer is computable
+  - `test_calmar_known_values` — original equity (100→200→100) has CAGR = 0, not > 0 as the docstring claimed; replaced with 100→200→150 (1-year, 253 points) giving CAGR = 50%, MDD = 25%, Calmar = 2.0, all hardcoded without calling `calculate_cagr`/`calculate_max_drawdown`
+  - `test_force_close_pnl_computed_correctly` — added explicit PnL formula verification (available capital → shares → exit proceeds → commission → net), not just `pnl > 0`
+  - `test_shorts_gain_when_prices_fall` — changed `!= equity[0]` (direction-agnostic) to `> equity[0]` with explanation of why net should be positive
 
 ### Test Coverage Results
 ```
@@ -192,7 +199,7 @@ backtest/strategy.py      13      0   100%
 ------------------------------------------
 TOTAL                    329      1    99%
 ```
-114 tests passing.
+118 tests passing.
 
 ---
 

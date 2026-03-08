@@ -285,6 +285,7 @@ class TestForceClose:
         last_price = 120.0
         commission = 0.001
         slippage = 0.002
+        initial_capital = 10_000.0
         signals = pl.DataFrame({
             "open": [buy_price, 110.0, last_price],
             "close": [buy_price, 110.0, last_price],
@@ -292,7 +293,7 @@ class TestForceClose:
         })
         result = run_backtest(
             signals,
-            initial_capital=10_000.0,
+            initial_capital=initial_capital,
             commission_rate=commission,
             slippage_rate=slippage,
         )
@@ -301,5 +302,17 @@ class TestForceClose:
         # exit_price should include slippage
         expected_exit = last_price * (1.0 - slippage)
         assert abs(trades["exit_price"][0] - expected_exit) < 1e-6
-        # PnL should be positive (price rose)
-        assert trades["pnl"][0] > 0
+        # Manual PnL computation:
+        # available  = 10000 * (1 - commission) = 9990
+        # entry_fill = 100 * (1 + slippage)    = 100.2
+        # shares     = 9990 / 100.2            ≈ 99.7006
+        # exit_fill  = 120 * (1 - slippage)    = 119.76
+        # net        = shares * exit_fill * (1 - commission)
+        # pnl        = net - shares * entry_fill
+        available   = initial_capital * (1.0 - commission)
+        entry_fill  = buy_price * (1.0 + slippage)
+        shares      = available / entry_fill
+        exit_fill   = last_price * (1.0 - slippage)
+        net         = shares * exit_fill * (1.0 - commission)
+        expected_pnl = net - shares * entry_fill
+        assert abs(trades["pnl"][0] - expected_pnl) < 0.01
