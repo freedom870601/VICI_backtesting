@@ -124,9 +124,12 @@ All sidebar inputs and metric cards include a `(?)` help icon with plain-English
 This project was built entirely using **Claude Code** (Sonnet 4.6) following a strict TDD workflow.
 
 ### Skills Invoked
-- `test-driven-development` — Red → Green → Refactor cycle for every module
-- `python-testing-patterns` — pytest fixtures, monkeypatching, known-value assertions
-- `writing-plans` — structured implementation plan before writing code
+- `writing-plans` — structured implementation plan before writing any code (phases, steps, verification)
+- `test-driven-development` — Red → Green → Refactor cycle for every module (metrics, strategy, engine, data, factor)
+- `python-testing-patterns` — pytest fixtures, monkeypatching yfinance, known-value assertions, edge case guards
+- `git-commit` — Conventional Commits message generation and staging for each phase
+- `systematic-debugging` — root-cause analysis for rolling_sharpe ±∞ and open-entry look-ahead bias
+- `frontend-design` — Streamlit dashboard styling: dark theme, metric cards, sidebar layout, hover tooltips, scoped CSS
 
 ### Example Prompts Used
 
@@ -167,6 +170,8 @@ This project was built entirely using **Claude Code** (Sonnet 4.6) following a s
 | 14 | `feat(app)` | Strategy vs Benchmark table; Underwater Drawdown Chart |
 | 15 | `fix(metrics)` | Guard rolling_sharpe against near-zero std (null instead of ±∞); remove Rolling Metrics chart |
 | 16 | `fix(engine)` | Fix `open` entry price: fill at next bar's open[t+1] instead of same-bar open[t], eliminating look-ahead bias |
+| 17 | `feat(factor)` | Add configurable rebalance frequency (every N weeks, 1–12 selectable) to long-short factor backtest |
+| 18 | `style(app)` | Scope sidebar font-family CSS to specific element types to avoid unintended style bleed |
 
 ### Manual Corrections Made
 - **CAGR test**: Fixed test to use 253 data points (252 intervals = 1 year) rather than 2 points
